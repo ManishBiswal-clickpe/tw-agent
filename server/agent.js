@@ -11,14 +11,14 @@ import path from "node:path";
 
 export async function createLocalAgent(config) {
   // Isolate credentials and discovery from the user's global Pi configuration.
-  const agentDir = await mkdtemp(path.join(tmpdir(), "tw-agent-"));
+  const agentDir = await mkdtemp(path.join(tmpdir(), "flashlet-"));
   try {
     const modelRuntime = await ModelRuntime.create({
       authPath: path.join(agentDir, "auth.json"),
       modelsPath: null,
       refreshOnCreate: false,
     });
-    modelRuntime.registerProvider("tw-local", {
+    modelRuntime.registerProvider("flashlet-local", {
       name: "Local model",
       baseUrl: config.baseUrl,
       api: "openai-completions",
@@ -49,14 +49,14 @@ export async function createLocalAgent(config) {
       noPromptTemplates: true,
       agentsFilesOverride: () => ({ agentsFiles: [] }),
       systemPromptOverride: () =>
-        `You are TW, a local programming assistant. Work in the configured workspace. Explain your approach clearly, inspect files before suggesting changes, and never claim you ran something unless a tool confirms it. ${config.allowWrites ? "Write and shell tools are enabled by the operator. Avoid destructive commands." : "You are in read-only mode. Inspect files and propose changes, but do not claim to edit or run commands."}`,
+        `You are Flashlet, a local programming assistant. Work in the configured workspace. Explain your approach clearly, inspect files before suggesting changes, and never claim you ran something unless a tool confirms it. ${config.allowWrites ? "Write and shell tools are enabled by the operator. Avoid destructive commands." : "You are in read-only mode. Inspect files and propose changes, but do not claim to edit or run commands."}`,
     });
     await resourceLoader.reload();
     const { session } = await createAgentSession({
       cwd: config.workspace,
       agentDir,
       modelRuntime,
-      model: modelRuntime.getModel("tw-local", config.modelId),
+      model: modelRuntime.getModel("flashlet-local", config.modelId),
       thinkingLevel: "off",
       resourceLoader,
       settingsManager,

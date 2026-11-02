@@ -1,4 +1,4 @@
-# TW Agent
+# Flashlet
 
 A local-first coding workbench: browser UI → Node + Pi SDK → your OpenAI-compatible model server. No hosted model is configured by default.
 
@@ -9,24 +9,24 @@ Requires **Node.js 22.19+** and a running model server that supports **streaming
 ```sh
 npm ci
 cp .env.example .env
-# Set TW_WORKSPACE, TW_MODEL_BASE_URL and TW_MODEL_ID in .env
+# Set FLASHLET_WORKSPACE, FLASHLET_MODEL_BASE_URL and FLASHLET_MODEL_ID in .env
 npm run dev
 ```
 
-Open **http://127.0.0.1:3210**. Start your model server separately; TW does not download weights or launch inference.
+Open **http://127.0.0.1:3210**. Start your model server separately; Flashlet does not download weights or launch inference.
 
 Example configuration for a compatible local server:
 
 ```dotenv
-TW_WORKSPACE=/absolute/path/to/your/project
-TW_MODEL_BASE_URL=http://127.0.0.1:8080/v1
-TW_MODEL_ID=local-model
-TW_CONTEXT_WINDOW=32768
-TW_MAX_TOKENS=4096
-TW_ALLOW_WRITES=false
+FLASHLET_WORKSPACE=/absolute/path/to/your/project
+FLASHLET_MODEL_BASE_URL=http://127.0.0.1:8080/v1
+FLASHLET_MODEL_ID=local-model
+FLASHLET_CONTEXT_WINDOW=32768
+FLASHLET_MAX_TOKENS=4096
+FLASHLET_ALLOW_WRITES=false
 ```
 
-Use the model ID actually exposed by your server (`/v1/models` is often useful). FreeToken and llama.cpp are intended targets, but their model-specific tool-call templates and compatibility still need testing. There is no claim that every OpenAI-compatible endpoint supports agent tool calls. Match the context/output limits to the loaded model. If your server requires authentication, set `TW_MODEL_API_KEY` in `.env`. For a server on another machine, the configured endpoint can send code and prompts there, so choose it deliberately.
+Use the model ID actually exposed by your server (`/v1/models` is often useful). FreeToken and llama.cpp are intended targets, but their model-specific tool-call templates and compatibility still need testing. There is no claim that every OpenAI-compatible endpoint supports agent tool calls. Match the context/output limits to the loaded model. If your server requires authentication, set `FLASHLET_MODEL_API_KEY` in `.env`. For a server on another machine, the configured endpoint can send code and prompts there, so choose it deliberately.
 
 ## What it does
 
@@ -35,7 +35,7 @@ Use the model ID actually exposed by your server (`/v1/models` is often useful).
 - Explore workspace files and preview text files up to 200 KB.
 - View tracked working-tree changes against `HEAD`, with added/removed lines.
 - Run Pi's actual agent loop in Node, not a browser-side imitation or CLI subprocess.
-- Start read-only (`read`, `ls`, `find`, `grep`). Set `TW_ALLOW_WRITES=true` and restart to enable `bash`, `write`, and `edit`.
+- Start read-only (`read`, `ls`, `find`, `grep`). Set `FLASHLET_ALLOW_WRITES=true` and restart to enable `bash`, `write`, and `edit`.
 - Use a responsive three-panel desktop layout and compact mobile chat/task switcher.
 
 **Tasks are ephemeral:** browser refresh loses the task UI; restarting the server loses all conversations. Disconnected idle sessions are cleaned up after an hour. There are at most eight server sessions; use New task to replace the oldest idle task when the UI reaches that limit. This is a single-operator development tool, not a multi-user service.

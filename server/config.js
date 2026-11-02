@@ -8,7 +8,7 @@ export function readConfig(env = process.env) {
       throw new Error(`Invalid ${key}`);
     return value;
   };
-  const baseUrl = new URL(env.TW_MODEL_BASE_URL || "http://127.0.0.1:8080/v1");
+  const baseUrl = new URL(env.FLASHLET_MODEL_BASE_URL || "http://127.0.0.1:8080/v1");
   if (
     !["http:", "https:"].includes(baseUrl.protocol) ||
     baseUrl.username ||
@@ -17,19 +17,19 @@ export function readConfig(env = process.env) {
     baseUrl.hash
   )
     throw new Error("Invalid model endpoint");
-  const workspace = realpathSync(path.resolve(env.TW_WORKSPACE || "."));
+  const workspace = realpathSync(path.resolve(env.FLASHLET_WORKSPACE || "."));
   if (!statSync(workspace).isDirectory())
-    throw new Error("TW_WORKSPACE must be a directory");
-  const contextWindow = number("TW_CONTEXT_WINDOW", 32768, 2000000);
-  const maxTokens = number("TW_MAX_TOKENS", 4096, contextWindow);
+    throw new Error("FLASHLET_WORKSPACE must be a directory");
+  const contextWindow = number("FLASHLET_CONTEXT_WINDOW", 32768, 2000000);
+  const maxTokens = number("FLASHLET_MAX_TOKENS", 4096, contextWindow);
   return {
     port: number("PORT", 3210, 65535),
     workspace,
     baseUrl: baseUrl.href.replace(/\/$/, ""),
-    modelId: env.TW_MODEL_ID || "local-model",
-    apiKey: env.TW_MODEL_API_KEY || "local",
+    modelId: env.FLASHLET_MODEL_ID || "local-model",
+    apiKey: env.FLASHLET_MODEL_API_KEY || "local",
     contextWindow,
     maxTokens,
-    allowWrites: env.TW_ALLOW_WRITES === "true",
+    allowWrites: env.FLASHLET_ALLOW_WRITES === "true",
   };
 }

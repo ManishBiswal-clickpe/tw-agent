@@ -27,7 +27,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
         .json({ error: "Cross-origin requests are not allowed" });
     if (
       !["GET", "HEAD"].includes(req.method) &&
-      req.get("x-tw-client") !== "workbench"
+      req.get("x-flashlet-client") !== "workbench"
     )
       return res.status(403).json({ error: "Missing client header" });
     res.set({
@@ -143,11 +143,11 @@ export function createApp(config, agentFactory = createLocalAgent) {
         .status(404)
         .json({ error: "Session unavailable. Start a new task." });
     entry.lastUsed = Date.now();
-    req.tw = entry;
+    req.flashlet = entry;
     next();
   });
   app.get("/api/sessions/:id/events", (req, res) => {
-    const entry = req.tw;
+    const entry = req.flashlet;
     res.set({
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -169,7 +169,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
     });
   });
   app.post("/api/sessions/:id/prompt", (req, res) => {
-    const entry = req.tw;
+    const entry = req.flashlet;
     const text = req.body.text;
     if (typeof text !== "string" || !text.trim() || text.length > 16000)
       return res
@@ -190,7 +190,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       });
   });
   app.post("/api/sessions/:id/abort", async (req, res) => {
-    await req.tw.agent.session.abort();
+    await req.flashlet.agent.session.abort();
     res.json({ stopped: true });
   });
   async function remove(entry) {
@@ -201,7 +201,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
     sessions.delete(entry.id);
   }
   app.delete("/api/sessions/:id", async (req, res) => {
-    await remove(req.tw);
+    await remove(req.flashlet);
     res.status(204).end();
   });
   const sweep = setInterval(() => {
@@ -243,7 +243,7 @@ if (
   const { app, close } = createApp(config);
   const server = app.listen(config.port, "127.0.0.1", () =>
     console.log(
-      `TW workbench: http://127.0.0.1:${config.port}\nWorkspace: ${config.workspace}\nTools: ${config.allowWrites ? "write + shell enabled (not sandboxed)" : "read-only (not sandboxed)"}`,
+      `Flashlet workbench: http://127.0.0.1:${config.port}\nWorkspace: ${config.workspace}\nTools: ${config.allowWrites ? "write + shell enabled (not sandboxed)" : "read-only (not sandboxed)"}`,
     ),
   );
   for (const signal of ["SIGINT", "SIGTERM"])

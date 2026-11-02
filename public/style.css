@@ -229,8 +229,8 @@ main {
 .welcome-mark {
   font-family: Georgia, serif;
   color: #3a533a;
-  font-size: 67px;
-  letter-spacing: -7px;
+  font-size: 60px;
+  letter-spacing: -3px;
   line-height: 1;
   margin-bottom: 28px;
 }
@@ -672,7 +672,7 @@ textarea::placeholder {
     padding: 35px 22px 20px;
   }
   .welcome-mark {
-    font-size: 55px;
+    font-size: 44px;
     margin-bottom: 22px;
   }
   h1 {
@@ -739,7 +739,7 @@ textarea::placeholder {
     gap: 8px;
   }
   .topbar > div:first-child:before {
-    content: "tw·";
+    content: "flashlet·";
     font:
       25px Georgia,
       serif;

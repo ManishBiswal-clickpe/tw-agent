@@ -7,7 +7,7 @@ async function api(url, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-TW-Client": "workbench",
+      "X-Flashlet-Client": "workbench",
       ...options.headers,
     },
   });
@@ -45,7 +45,7 @@ function addMessage(container, item) {
   el.append(
     textNode(
       "div",
-      item.role === "user" ? "You" : "TW · local agent",
+      item.role === "user" ? "You" : "Flashlet · local agent",
       "message-label",
     ),
   );
@@ -362,7 +362,7 @@ try {
     );
   await loadFiles();
 } catch (error) {
-  notice(`Cannot connect to TW: ${error.message}`);
+  notice(`Cannot connect to Flashlet: ${error.message}`);
 }
 render();
 

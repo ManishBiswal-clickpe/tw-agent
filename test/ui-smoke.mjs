@@ -7,8 +7,8 @@ await mkdir("test-results", { recursive: true });
 const mock = await startMockModel();
 const config = readConfig({
   PORT: "3210",
-  TW_WORKSPACE: process.cwd(),
-  TW_MODEL_BASE_URL: mock.url,
+  FLASHLET_WORKSPACE: process.cwd(),
+  FLASHLET_MODEL_BASE_URL: mock.url,
 });
 const workbench = createApp(config);
 const server = workbench.app.listen(3210, "127.0.0.1");
@@ -31,7 +31,7 @@ try {
     fullPage: true,
   });
   await page.getByText("package.json", { exact: true }).click();
-  await page.locator("#file-content").filter({ hasText: "tw-agent" }).waitFor();
+  await page.locator("#file-content").filter({ hasText: "flashlet" }).waitFor();
   await page
     .getByLabel("Message your local agent")
     .fill("inspect the package and explain this project");

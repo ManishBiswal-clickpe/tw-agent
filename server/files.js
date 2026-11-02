@@ -6,7 +6,7 @@ const exec = promisify(execFile);
 const excluded = new Set([
   ".git",
   "node_modules",
-  ".tw-agent",
+  ".flashlet",
   ".ssh",
   ".vault",
   "dist",

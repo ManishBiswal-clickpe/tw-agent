@@ -11,14 +11,14 @@ import { startMockModel } from "./mock-model.js";
 
 test("configuration validates endpoint and limits", () => {
   assert.throws(() => readConfig({ PORT: "-1" }));
-  assert.throws(() => readConfig({ TW_MODEL_BASE_URL: "file:///etc" }));
+  assert.throws(() => readConfig({ FLASHLET_MODEL_BASE_URL: "file:///etc" }));
   assert.throws(() =>
-    readConfig({ TW_CONTEXT_WINDOW: "10", TW_MAX_TOKENS: "20" }),
+    readConfig({ FLASHLET_CONTEXT_WINDOW: "10", FLASHLET_MAX_TOKENS: "20" }),
   );
   assert.equal(readConfig({}).allowWrites, false);
 });
 test("file preview rejects traversal, secrets, binary and escaped symlinks", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "tw-files-"));
+  const root = await mkdtemp(path.join(tmpdir(), "flashlet-files-"));
   try {
     await writeFile(path.join(root, "safe.txt"), "hello");
     await writeFile(path.join(root, ".env"), "secret");
@@ -43,7 +43,7 @@ test("file preview rejects traversal, secrets, binary and escaped symlinks", asy
 });
 test("real Pi SDK: session, SSE text, tool loop, busy rejection, abort, security and cleanup", async () => {
   const mock = await startMockModel();
-  const config = readConfig({ TW_MODEL_BASE_URL: mock.url });
+  const config = readConfig({ FLASHLET_MODEL_BASE_URL: mock.url });
   const workbench = createApp(config);
   const server = await new Promise((resolve) => {
     const s = workbench.app.listen(0, "127.0.0.1", () => resolve(s));
@@ -53,7 +53,7 @@ test("real Pi SDK: session, SSE text, tool loop, busy rejection, abort, security
   const headers = {
     Host: `127.0.0.1:${config.port}`,
     "Content-Type": "application/json",
-    "X-TW-Client": "workbench",
+    "X-Flashlet-Client": "workbench",
   };
   const request = (url, options = {}) =>
     fetch(base + url, {
