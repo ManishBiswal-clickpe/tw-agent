@@ -8,14 +8,13 @@
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "allowJs": true,
-    "checkJs": false
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": [
     "server/**/*.ts",
     "client/**/*.ts",
     "scripts/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "shared/**/*.ts"
   ]
 }

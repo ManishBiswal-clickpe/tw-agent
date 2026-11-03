@@ -1,14 +1,20 @@
+import type { ConnectorState } from "../shared/api.ts";
+import type { AppConfig, AgentFactory, AgentHandle } from "./types.ts";
 import type { Express } from "express";
 import { ConnectorStore, validateConnector, presets } from "./connectors.ts";
 export function connectorApi(
   app: Express,
   store: ConnectorStore,
-  config: any,
-  factory: any,
+  config: AppConfig,
+  factory: AgentFactory,
 ) {
-  let agent: any;
+  let agent: AgentHandle | undefined;
   let busy = false;
-  let state: any = { notifications: [], url: null, pendingInput: false };
+  let state: ConnectorState = {
+    notifications: [],
+    url: null,
+    pendingInput: false,
+  };
   let answer: ((value: string | undefined) => void) | undefined;
   const notify = (message: string) => {
     state.notifications.push(message);
@@ -24,7 +30,11 @@ export function connectorApi(
           openUrl: (url: string) => {
             state.url = url;
           },
-          input: (_title: string, _placeholder: string, opts: any) =>
+          input: (
+            _title: string,
+            _placeholder?: string,
+            opts?: { signal?: AbortSignal },
+          ) =>
             new Promise<string | undefined>((resolve) => {
               state.pendingInput = true;
               const done = (value?: string) => {
@@ -49,6 +59,81 @@ export function connectorApi(
       });
     return agent;
   }
+  app.get("/api/mcp-config", async (req, res) => {
+    if (!store.files)
+      return res.status(503).json({ error: "Config editor unavailable" });
+    try {
+      res.json(
+        await store.files.view(
+          req.query.scope === "project" ? "project" : "global",
+        ),
+      );
+    } catch (e) {
+      res
+        .status(400)
+        .json({ error: e instanceof Error ? e.message : "Cannot read config" });
+    }
+  });
+  app.put("/api/mcp-config", async (req, res) => {
+    if (!store.files)
+      return res.status(503).json({ error: "Config editor unavailable" });
+    if (busy)
+      return res
+        .status(409)
+        .json({ error: "Wait for connector operation to finish" });
+    if (
+      typeof req.body.json !== "string" ||
+      typeof req.body.revision !== "string"
+    )
+      return res.status(400).json({ error: "Expected JSON text and revision" });
+    busy = true;
+    try {
+      await store.files.saveEditor(
+        req.body.scope === "project" ? "project" : "global",
+        req.body.json,
+        req.body.revision,
+      );
+      await store.refreshGlobal();
+      await agent?.dispose();
+      agent = undefined;
+      res.json({
+        note: "mcp.json saved. Start a new task to load changes; use Sign in / Status below to authenticate.",
+      });
+    } catch (e) {
+      res
+        .status(400)
+        .json({ error: e instanceof Error ? e.message : "Invalid config" });
+    } finally {
+      busy = false;
+    }
+  });
+  app.post("/api/mcp-trust", async (req, res) => {
+    if (!store.files)
+      return res.status(503).json({ error: "Config editor unavailable" });
+    if (busy)
+      return res
+        .status(409)
+        .json({ error: "Wait for connector operation to finish" });
+    if (typeof req.body.trusted !== "boolean")
+      return res.status(400).json({ error: "Expected trust decision" });
+    if (req.body.trusted) {
+      try {
+        store.files.validate(await store.files.read("project"), "project");
+      } catch (e) {
+        return res.status(400).json({
+          error: e instanceof Error ? e.message : "Invalid project config",
+        });
+      }
+    }
+    store.files.trust.set(config.workspace, req.body.trusted);
+    await agent?.dispose();
+    agent = undefined;
+    res.json({
+      note: req.body.trusted
+        ? "Project trusted. Start a new task to load project MCP servers."
+        : "Project untrusted. Close old tasks to drop cached connections.",
+    });
+  });
   app.get("/api/connectors", (_req, res) =>
     res.json({ connectors: store.publicList(), presets, ...state, busy }),
   );
@@ -71,6 +156,7 @@ export function connectorApi(
         )
       )
         throw new Error("Connector name collides");
+      delete store.policies[entry.name];
       store.entries = [
         ...store.entries.filter((e) => e.name !== entry.name),
         entry,
@@ -83,8 +169,10 @@ export function connectorApi(
         saved: true,
         note: "Start a new task to use connector changes. Replacing a connector replaces its saved credentials/config fields.",
       });
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+      res
+        .status(400)
+        .json({ error: e instanceof Error ? e.message : "Invalid connector" });
     } finally {
       busy = false;
     }
@@ -93,15 +181,14 @@ export function connectorApi(
     if (busy)
       return res.status(409).json({ error: "Wait for sign-in to finish" });
     const name = String(req.params.name);
-    if (!store.entries.some((e) => e.name === name))
+    if (!store.effectiveEntries().some((e) => e.name === name))
       return res.status(404).json({ error: "Unknown connector" });
     busy = true;
     try {
       // Sign out first so removed OAuth credentials do not linger.
       const a = await getAgent();
       await a.session.prompt(`/mcp logout ${name}`);
-      store.entries = store.entries.filter((e) => e.name !== name);
-      await store.save();
+      await store.removeServer(name);
       await agent?.dispose();
       agent = undefined;
       res.json({
@@ -116,7 +203,7 @@ export function connectorApi(
     const name = String(req.params.name),
       action = String(req.params.action);
     if (
-      !store.entries.some((e) => e.name === name) ||
+      !store.effectiveEntries().some((e) => e.name === name) ||
       ![
         "login",
         "logout",
@@ -132,17 +219,15 @@ export function connectorApi(
         .status(409)
         .json({ error: "Another connector operation is running" });
     if (action === "permission") {
-      const entry = store.entries.find((e) => e.name === name)!;
-      entry.readOnly = !entry.readOnly;
-      await store.save();
+      const entry = store.effectiveEntries().find((e) => e.name === name)!;
+      await store.setReadOnly(name, !entry.readOnly);
       return res.json({
-        note: "Permission updated. Gmail writes follow this switch; other writes also require FLASHLET_ALLOW_WRITES=true.",
+        note: "Permission updated. Non-Gmail writes also require FLASHLET_ALLOW_WRITES=true.",
       });
     }
     if (action === "toggle") {
-      const entry = store.entries.find((e) => e.name === name)!;
-      entry.config.enabled = entry.config.enabled === false;
-      await store.save();
+      const entry = store.effectiveEntries().find((e) => e.name === name)!;
+      await store.setEnabled(name, entry.config.enabled === false);
       await agent?.dispose();
       agent = undefined;
       return res.json({
@@ -160,8 +245,8 @@ export function connectorApi(
       );
       state.tools = a.session
         .getAllTools()
-        .filter((t: any) => t.name.startsWith("mcp__"))
-        .map((t: any) => ({
+        .filter((t) => t.name.startsWith("mcp__"))
+        .map((t) => ({
           name: t.name,
           readOnly: t.annotations?.readOnlyHint === true,
         }));

@@ -1,16 +1,42 @@
-import express from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
+import type { AppConfig, AgentFactory, AgentHandle } from "./types.ts";
+interface SessionEntry {
+  id: string;
+  busy: boolean;
+  clients: Set<Response>;
+  history: { id: number; type: string; data: unknown }[];
+  seq: number;
+  lastUsed: number;
+  agent: AgentHandle | null;
+  unsubscribe?: () => void;
+}
+declare global {
+  namespace Express {
+    interface Request {
+      flashlet: SessionEntry;
+    }
+  }
+}
+import { McpConfigFiles } from "./mcp-config.ts";
 import { ConnectorStore, dataDirectory } from "./connectors.ts";
 import { connectorApi } from "./connector-api.ts";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { readConfig } from "./config.js";
-import { createLocalAgent } from "./agent.js";
-import { listFiles, previewFile, workspaceDiff } from "./files.js";
+import { readConfig } from "./config.ts";
+import { createLocalAgent } from "./agent.ts";
+import { listFiles, previewFile, workspaceDiff } from "./files.ts";
 
-export function createApp(config, agentFactory = createLocalAgent) {
+export function createApp(
+  config: AppConfig,
+  agentFactory: AgentFactory = createLocalAgent,
+) {
   const app = express();
-  const sessions = new Map();
+  const sessions = new Map<string, SessionEntry>();
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     // Loopback bind + Host and Origin checks prevent LAN exposure and DNS rebinding.
@@ -19,7 +45,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       `127.0.0.1:${config.port}`,
       `localhost:${config.port}`,
     ]);
-    if (!expected.has(host))
+    if (!host || !expected.has(host))
       return res
         .status(403)
         .json({ error: "Use the localhost address printed by the server." });
@@ -60,7 +86,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
   app.get("/api/files", async (req, res) => {
     try {
       res.json({
-        files: await listFiles(config.workspace, req.query.path || ""),
+        files: await listFiles(
+          config.workspace,
+          typeof req.query.path === "string" ? req.query.path : "",
+        ),
       });
     } catch {
       res.status(400).json({ error: "Cannot open this directory" });
@@ -68,7 +97,12 @@ export function createApp(config, agentFactory = createLocalAgent) {
   });
   app.get("/api/file", async (req, res) => {
     try {
-      res.json(await previewFile(config.workspace, req.query.path));
+      res.json(
+        await previewFile(
+          config.workspace,
+          typeof req.query.path === "string" ? req.query.path : "",
+        ),
+      );
     } catch {
       res.status(400).json({
         error:
@@ -87,7 +121,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       });
     // Reserve the slot before async initialization to bound concurrent creates.
     const id = randomUUID();
-    const entry = {
+    const entry: SessionEntry = {
       id,
       busy: false,
       clients: new Set(),
@@ -131,7 +165,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       next(error);
     }
   });
-  function emit(entry, type, data) {
+  function emit(entry: SessionEntry, type: string, data: unknown) {
     const item = { id: ++entry.seq, type, data };
     entry.history.push(item);
     if (entry.history.length > 2000) entry.history.shift();
@@ -143,7 +177,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       }
   }
   app.use("/api/sessions/:id", (req, res, next) => {
-    const entry = sessions.get(req.params.id);
+    const entry = sessions.get(String(req.params.id));
     if (!entry?.agent)
       return res
         .status(404)
@@ -186,8 +220,8 @@ export function createApp(config, agentFactory = createLocalAgent) {
     entry.busy = true;
     emit(entry, "run_start", {});
     res.status(202).json({ accepted: true });
-    entry.agent.session
-      .prompt(text.trim())
+    entry
+      .agent!.session.prompt(text.trim())
       .catch((error) => emit(entry, "run_error", { message: error.message }))
       .finally(() => {
         entry.busy = false;
@@ -196,10 +230,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
       });
   });
   app.post("/api/sessions/:id/abort", async (req, res) => {
-    await req.flashlet.agent.session.abort();
+    await req.flashlet.agent!.session.abort();
     res.json({ stopped: true });
   });
-  async function remove(entry) {
+  async function remove(entry: SessionEntry) {
     entry.unsubscribe?.();
     for (const client of entry.clients) client.end();
     entry.clients.clear();
@@ -222,15 +256,22 @@ export function createApp(config, agentFactory = createLocalAgent) {
   }, 60000);
   sweep.unref();
   app.use(express.static(fileURLToPath(new URL("../public", import.meta.url))));
-  app.use((error, _req, res, _next) => {
-    if (!res.headersSent)
-      res.status(error.status || 500).json({
-        error:
-          error.status === 400
-            ? "Invalid request body"
-            : "Request failed. Check the model endpoint and server configuration.",
-      });
-  });
+  app.use(
+    (
+      error: Error & { status?: number },
+      _req: Request,
+      res: Response,
+      _next: NextFunction,
+    ) => {
+      if (!res.headersSent)
+        res.status(error.status || 500).json({
+          error:
+            error.status === 400
+              ? "Invalid request body"
+              : "Request failed. Check the model endpoint and server configuration.",
+        });
+    },
+  );
   return {
     app,
     async close() {
@@ -247,6 +288,9 @@ if (
   const config = readConfig();
   const store = new ConnectorStore(dataDirectory());
   await store.load();
+  const files = new McpConfigFiles(store.dir, config.workspace);
+  await files.initialize();
+  await store.attachFiles(files);
   config.connectors = store;
   const { app, close } = createApp(config);
   const server = app.listen(config.port, "127.0.0.1", () =>

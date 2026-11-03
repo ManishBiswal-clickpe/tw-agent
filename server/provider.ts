@@ -1,8 +1,11 @@
 import { streamSimple as completions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as responses } from "@earendil-works/pi-ai/api/openai-responses";
+import type { Model } from "@earendil-works/pi-ai";
 import type { ProviderConfig } from "@earendil-works/pi-coding-agent";
 
-export function providerConfig(config: any): ProviderConfig {
+import type { AppConfig } from "./types.ts";
+
+export function providerConfig(config: AppConfig): ProviderConfig {
   const api = config.modelApi || "openai-completions";
   // Pi supplies its full hooks/options. Only transport URL/query/auth are adapted here.
   const transport: typeof fetch = (input, init) => {
@@ -26,8 +29,15 @@ export function providerConfig(config: any): ProviderConfig {
     api,
     apiKey: config.apiKey,
     streamSimple: (model, context, options) => {
-      const stream = api === "openai-responses" ? responses : completions;
-      return stream(model as any, context, { ...options, fetch: transport });
+      return api === "openai-responses"
+        ? responses(model as Model<"openai-responses">, context, {
+            ...options,
+            fetch: transport,
+          })
+        : completions(model as Model<"openai-completions">, context, {
+            ...options,
+            fetch: transport,
+          });
     },
     models: [
       {

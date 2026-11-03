@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createApp } from "../server/index.js";
-import { readConfig } from "../server/config.js";
-import { previewFile, listFiles } from "../server/files.js";
-import { startMockModel } from "./mock-model.js";
+import { createApp } from "../server/index.ts";
+import { readConfig } from "../server/config.ts";
+import { previewFile, listFiles } from "../server/files.ts";
+import { startMockModel } from "./mock-model.ts";
 
 test("configuration validates endpoint and limits", () => {
   assert.throws(() => readConfig({ PORT: "-1" }));
@@ -45,17 +45,17 @@ test("real Pi SDK: session, SSE text, tool loop, busy rejection, abort, security
   const mock = await startMockModel();
   const config = readConfig({ FLASHLET_MODEL_BASE_URL: mock.url });
   const workbench = createApp(config);
-  const server = await new Promise((resolve) => {
+  const server = await new Promise<http.Server>((resolve) => {
     const s = workbench.app.listen(0, "127.0.0.1", () => resolve(s));
   });
-  config.port = server.address().port;
+  config.port = (server.address() as import("node:net").AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
   const headers = {
     Host: `127.0.0.1:${config.port}`,
     "Content-Type": "application/json",
     "X-Flashlet-Client": "workbench",
   };
-  const request = (url, options = {}) =>
+  const request = (url: string, options: RequestInit = {}) =>
     fetch(base + url, {
       ...options,
       headers: { ...headers, ...options.headers },
@@ -90,7 +90,7 @@ test("real Pi SDK: session, SSE text, tool loop, busy rejection, abort, security
     ).json();
     assert.ok(id, "Session creation failed");
     const stream = await request(`/api/sessions/${id}/events`);
-    reader = stream.body.getReader();
+    reader = stream.body!.getReader();
     assert.equal(
       (
         await request(`/api/sessions/${id}/prompt`, {
@@ -160,7 +160,7 @@ test("real Pi SDK: session, SSE text, tool loop, busy rejection, abort, security
   } finally {
     await reader?.cancel();
     await workbench.close();
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     await mock.close();
   }
 });

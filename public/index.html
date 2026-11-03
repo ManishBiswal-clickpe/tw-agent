@@ -161,6 +161,34 @@
         Changes apply to new tasks.
       </p>
       <div id="connector-notice" role="status"></div>
+      <details id="mcp-editor">
+        <summary>Edit mcp.json (global / project)</summary>
+        <label
+          >Configuration scope<select id="mcp-scope">
+            <option value="global">Global (default)</option>
+            <option value="project">This project (.pi/mcp.json)</option>
+          </select></label
+        >
+        <code id="mcp-location"></code>
+        <p>
+          Use pi's mcpServers format. Exposure defaults to codemode. Existing
+          secret values and command arguments are masked. Keep the mask to
+          preserve them; use environment references for project secrets.
+        </p>
+        <label
+          >mcp.json<textarea
+            id="mcp-json"
+            rows="14"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+          ></textarea>
+        </label>
+        <div id="mcp-editor-notice" role="status"></div>
+        <button id="mcp-save" type="button">Validate and save JSON</button
+        ><button id="mcp-reload" type="button">Reload JSON</button
+        ><button id="mcp-trust" type="button">Trust this project</button>
+      </details>
       <div id="connector-list"></div>
       <pre id="connector-status" aria-live="polite"></pre>
       <a id="oauth-link" target="_blank" rel="noopener noreferrer" hidden
@@ -281,6 +309,6 @@
       ></iframe>
     </dialog>
     <script type="module" src="/assets/connectors.js"></script>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/assets/app.js"></script>
   </body>
 </html>

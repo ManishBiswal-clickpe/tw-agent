@@ -13,14 +13,14 @@ const excluded = new Set([
   "build",
   "coverage",
 ]);
-export function visible(name) {
+export function visible(name: string) {
   return (
     !excluded.has(name) &&
     !/^\.env(?:\.|$)/.test(name) &&
     !/\.(pem|key|p12|pfx)$/i.test(name)
   );
 }
-export async function resolveFile(root, relative = "") {
+export async function resolveFile(root: string, relative = "") {
   if (
     typeof relative !== "string" ||
     path.isAbsolute(relative) ||
@@ -32,7 +32,7 @@ export async function resolveFile(root, relative = "") {
     throw new Error("Path outside workspace");
   return target;
 }
-export async function listFiles(root, relative = "") {
+export async function listFiles(root: string, relative = "") {
   const target = await resolveFile(root, relative);
   const items = await readdir(target, { withFileTypes: true });
   return items
@@ -48,7 +48,7 @@ export async function listFiles(root, relative = "") {
         a.name.localeCompare(b.name),
     );
 }
-export async function previewFile(root, relative) {
+export async function previewFile(root: string, relative: string) {
   const target = await resolveFile(root, relative);
   const info = await stat(target);
   if (!info.isFile() || info.size > 200000)
@@ -58,7 +58,7 @@ export async function previewFile(root, relative) {
     throw new Error("Binary file preview unavailable");
   return { path: relative, content };
 }
-export async function workspaceDiff(root) {
+export async function workspaceDiff(root: string) {
   try {
     const { stdout } = await exec(
       "git",

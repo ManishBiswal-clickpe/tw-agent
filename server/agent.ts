@@ -5,6 +5,7 @@ import {
   SettingsManager,
   DefaultResourceLoader,
   createToolSearchExtension,
+  createCodemodeExtension,
 } from "@earendil-works/pi-coding-agent";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,7 +14,12 @@ import { mcpExtension } from "./mcp-extension.ts";
 import { providerConfig } from "./provider.ts";
 import { permissionExtension } from "./connectors.ts";
 
-export async function createLocalAgent(config) {
+import type { AppConfig, AgentHandle } from "./types.ts";
+import { browserExtensionUI } from "./rpc-ui.ts";
+
+export async function createLocalAgent(
+  config: AppConfig,
+): Promise<AgentHandle> {
   // Isolate credentials and discovery from the user's global Pi configuration.
   const temporaryDir = await mkdtemp(path.join(tmpdir(), "flashlet-"));
   const agentDir = config.connectors?.dir || temporaryDir;
@@ -38,6 +44,7 @@ export async function createLocalAgent(config) {
       noExtensions: true,
       extensionFactories: config.connectors
         ? [
+            createCodemodeExtension({ mode: "on", models: false }),
             createToolSearchExtension(),
             await mcpExtension(config.connectors, config.connectorUi),
             permissionExtension(config.connectors, config.allowWrites),
@@ -64,18 +71,7 @@ export async function createLocalAgent(config) {
       config.connectorUi
         ? {
             mode: "rpc",
-            uiContext: {
-              ...config.connectorUi,
-              select: async () => undefined,
-              confirm: async () => false,
-              editor: async () => undefined,
-              custom: async () => undefined,
-              setStatus() {},
-              setWorkingMessage() {},
-              setWidget() {},
-              setTitle() {},
-              onTerminalInput: () => () => {},
-            },
+            uiContext: browserExtensionUI(config.connectorUi),
           }
         : {},
     );
@@ -85,7 +81,7 @@ export async function createLocalAgent(config) {
         await session.abort();
         await session.extensionRunner.emit({
           type: "session_shutdown",
-          reason: "exit",
+          reason: "quit",
         });
         session.dispose();
         await rm(temporaryDir, { recursive: true, force: true });

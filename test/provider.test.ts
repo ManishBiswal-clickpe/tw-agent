@@ -1,12 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { providerConfig } from "../server/provider.ts";
-import { readConfig } from "../server/config.js";
-import { createLocalAgent } from "../server/agent.js";
+import type { AddressInfo } from "node:net";
+import type { AgentHandle } from "../server/types.ts";
+interface CapturedRequest {
+  url: string | undefined;
+  headers: http.IncomingHttpHeaders;
+  body: { model: string };
+}
+import { readConfig } from "../server/config.ts";
+import { createLocalAgent } from "../server/agent.ts";
 
 test("generic provider sends deployment, custom api-key and api-version on the wire", async () => {
-  let captured: any;
+  let captured: CapturedRequest | undefined;
   const server = http.createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
@@ -29,10 +35,10 @@ test("generic provider sends deployment, custom api-key and api-version on the w
     );
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  const port = (server.address() as any).port;
-  let agent: any;
+  const port = (server.address() as AddressInfo).port;
+  let agent: AgentHandle | undefined;
   try {
-    const config: any = readConfig({
+    const config = readConfig({
       FLASHLET_MODEL_BASE_URL: `http://127.0.0.1:${port}/openai/v1`,
       FLASHLET_MODEL_ID: "my-deployment",
       FLASHLET_MODEL_API_KEY: "test-key",
@@ -41,6 +47,7 @@ test("generic provider sends deployment, custom api-key and api-version on the w
     });
     agent = await createLocalAgent(config);
     await agent.session.prompt("hello");
+    assert.ok(captured);
     assert.equal(
       captured.url,
       "/openai/v1/chat/completions?api-version=test-version",
@@ -56,7 +63,7 @@ test("generic provider sends deployment, custom api-key and api-version on the w
 });
 
 test("generic Responses transport uses /responses and bearer authentication", async () => {
-  let captured: any;
+  let captured: CapturedRequest | undefined;
   const server = http.createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -111,17 +118,18 @@ test("generic Responses transport uses /responses and bearer authentication", as
     res.end();
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  let agent: any;
+  let agent: AgentHandle | undefined;
   try {
     agent = await createLocalAgent(
       readConfig({
-        FLASHLET_MODEL_BASE_URL: `http://127.0.0.1:${(server.address() as any).port}/openai/v1`,
+        FLASHLET_MODEL_BASE_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/openai/v1`,
         FLASHLET_MODEL_ID: "deployment",
         FLASHLET_MODEL_API: "responses",
         FLASHLET_MODEL_API_KEY: "test-bearer",
       }),
     );
     await agent.session.prompt("hello");
+    assert.ok(captured);
     assert.equal(captured.url, "/openai/v1/responses");
     assert.equal(captured.headers.authorization, "Bearer test-bearer");
     assert.equal(captured.body.model, "deployment");

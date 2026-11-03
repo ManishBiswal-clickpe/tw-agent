@@ -1,8 +1,10 @@
 import path from "node:path";
 import { realpathSync, statSync } from "node:fs";
 
-export function readConfig(env = process.env) {
-  const number = (key, fallback, max) => {
+import type { AppConfig } from "./types.ts";
+
+export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const number = (key: string, fallback: number, max: number) => {
     const value = Number(env[key] || fallback);
     if (!Number.isInteger(value) || value < 1 || value > max)
       throw new Error(`Invalid ${key}`);

@@ -1,8 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { createApp } from "../server/index.js";
-import { readConfig } from "../server/config.js";
-import { startMockModel } from "./mock-model.js";
+import { createApp } from "../server/index.ts";
+import { readConfig } from "../server/config.ts";
+import { startMockModel } from "./mock-model.ts";
 await mkdir("test-results", { recursive: true });
 const mock = await startMockModel();
 const config = readConfig({
@@ -21,7 +21,7 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 1000 },
   deviceScaleFactor: 1,
 });
-const errors = [];
+const errors: string[] = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
   await page.goto("http://127.0.0.1:3210");
@@ -86,6 +86,6 @@ try {
 } finally {
   await browser.close();
   await workbench.close();
-  await new Promise((r) => server.close(r));
+  await new Promise<void>((r) => server.close(() => r()));
   await mock.close();
 }

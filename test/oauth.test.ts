@@ -1,16 +1,20 @@
+import type { AddressInfo } from "node:net";
+import type { ConnectorPanelResponse } from "../shared/api.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
-import { createApp } from "../server/index.js";
-import { readConfig } from "../server/config.js";
+import { createApp } from "../server/index.ts";
+import { readConfig } from "../server/config.ts";
 import { ConnectorStore, validateConnector } from "../server/connectors.ts";
 
 const listen = (server: http.Server, port = 0) =>
   new Promise<number>((r) =>
-    server.listen(port, "127.0.0.1", () => r((server.address() as any).port)),
+    server.listen(port, "127.0.0.1", () =>
+      r((server.address() as AddressInfo).port),
+    ),
   );
 const close = (server: http.Server) =>
   new Promise<void>((r) => server.close(() => r()));
@@ -33,7 +37,7 @@ test(
     let sawToken = false;
     const remote = http.createServer(async (req, res) => {
       const url = new URL(req.url!, root);
-      const json = (status: number, body: any, headers = {}) => {
+      const json = (status: number, body: unknown, headers = {}) => {
         res.writeHead(status, {
           "Content-Type": "application/json",
           ...headers,
@@ -129,7 +133,7 @@ test(
     const localPort = await new Promise<number>((r) => {
       const s = http.createServer();
       s.listen(0, "127.0.0.1", () => {
-        const p = (s.address() as any).port;
+        const p = (s.address() as AddressInfo).port;
         s.close(() => r(p));
       });
     });
@@ -139,7 +143,7 @@ test(
     });
     const local = http.createServer(workbench.app);
     await listen(local, localPort);
-    const call = async (url: string, body?: any) => {
+    const call = async (url: string, body?: unknown) => {
       const r = await fetch(
         `http://127.0.0.1:${localPort}/api/connectors${url}`,
         {
@@ -151,17 +155,17 @@ test(
           body: body ? JSON.stringify(body) : undefined,
         },
       );
-      return r.json() as any;
+      return r.json() as Promise<ConnectorPanelResponse>;
     };
     try {
       await call("/oauth/login", {});
-      let auth: any;
+      let auth: ConnectorPanelResponse = await call("");
       await waitFor(async () => {
         auth = await call("");
         if (!auth.busy) throw Error(JSON.stringify(auth));
         return !!auth.url;
       });
-      const authorization = new URL(auth.url);
+      const authorization = new URL(auth.url!);
       state = authorization.searchParams.get("state")!;
       sawPkce =
         authorization.searchParams.get("code_challenge_method") === "S256";
@@ -178,9 +182,7 @@ test(
       assert.ok(
         auth.notifications.some((m: string) => m.includes("Signed in")),
       );
-      assert.ok(
-        auth.tools.some((t: any) => t.name === "mcp__oauth__read_notes"),
-      );
+      assert.ok(auth.tools!.some((t) => t.name === "mcp__oauth__read_notes"));
       const tokens = await readFile(path.join(dir, "mcp-auth.json"), "utf8");
       assert.ok(tokens.includes("mock-refresh"));
       assert.ok(!JSON.stringify(auth).includes("mock-access"));

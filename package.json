@@ -8,15 +8,15 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "dev": "node --import tsx --watch --env-file-if-exists=.env server/index.js",
-    "start": "node --import tsx --env-file-if-exists=.env server/index.js",
-    "test": "node --import tsx --test test/*.test.js test/*.test.ts",
-    "check": "tsc --noEmit && node --check server/index.js && node --check server/agent.js && node --check public/app.js",
-    "test:ui": "npm run build && node --import tsx test/ui-smoke.mjs && node --import tsx test/connectors-ui.mjs",
+    "dev": "node --import tsx --watch --env-file-if-exists=.env server/index.ts",
+    "start": "node --import tsx --env-file-if-exists=.env server/index.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "check": "tsc --noEmit",
+    "test:ui": "npm run build && node --import tsx test/ui-smoke.ts && node --import tsx test/connectors-ui.ts",
     "build": "tsx scripts/build.ts",
     "prestart": "npm run build",
     "predev": "npm run build",
-    "test:connectors-ui": "node --import tsx test/connectors-ui.mjs"
+    "test:connectors-ui": "node --import tsx test/connectors-ui.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.4.0",

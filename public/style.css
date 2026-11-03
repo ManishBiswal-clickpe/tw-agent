@@ -912,3 +912,34 @@ dialog p {
     font-size: 9px;
   }
 }
+
+#mcp-json {
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+  min-height: 260px;
+  white-space: pre;
+}
+#mcp-location {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+#mcp-editor-notice {
+  font-size: 13px;
+  margin: 12px 0;
+  line-height: 1.6;
+}
+
+.settings-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fafbf7;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d8dfd4;
+}
+
+#mcp-editor {
+  scroll-margin-top: 80px;
+}
