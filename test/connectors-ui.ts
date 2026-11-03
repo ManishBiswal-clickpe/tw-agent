@@ -96,11 +96,13 @@ try {
     .filter({ hasText: "project_docs" })
     .waitFor();
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("#connectors-dialog").evaluate(el => { el.scrollTop = 0; });
   await page.screenshot({
     path: "test-results/mcp-editor-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("#connectors-dialog").evaluate(el => { el.scrollTop = 0; });
   await page.screenshot({
     path: "test-results/mcp-editor-mobile.png",
     fullPage: true,

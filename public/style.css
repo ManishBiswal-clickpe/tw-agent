@@ -934,6 +934,7 @@ dialog p {
 .settings-dialog > header {
   position: sticky;
   top: 0;
+  box-shadow: 0 -24px 0 24px #fafbf7;
   z-index: 2;
   background: #fafbf7;
   padding-bottom: 12px;
