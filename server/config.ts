@@ -1,14 +1,18 @@
 import path from "node:path";
 import { realpathSync, statSync } from "node:fs";
 
-export function readConfig(env = process.env) {
-  const number = (key, fallback, max) => {
+import type { AppConfig } from "./types.ts";
+
+export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const number = (key: string, fallback: number, max: number) => {
     const value = Number(env[key] || fallback);
     if (!Number.isInteger(value) || value < 1 || value > max)
       throw new Error(`Invalid ${key}`);
     return value;
   };
-  const baseUrl = new URL(env.FLASHLET_MODEL_BASE_URL || "http://127.0.0.1:8080/v1");
+  const baseUrl = new URL(
+    env.FLASHLET_MODEL_BASE_URL || "http://127.0.0.1:8080/v1",
+  );
   if (
     !["http:", "https:"].includes(baseUrl.protocol) ||
     baseUrl.username ||
@@ -26,6 +30,13 @@ export function readConfig(env = process.env) {
     port: number("PORT", 3210, 65535),
     workspace,
     baseUrl: baseUrl.href.replace(/\/$/, ""),
+    apiVersion: env.FLASHLET_MODEL_API_VERSION || undefined,
+    modelApi:
+      env.FLASHLET_MODEL_API === "responses"
+        ? "openai-responses"
+        : "openai-completions",
+    authHeader:
+      env.FLASHLET_MODEL_AUTH_HEADER === "api-key" ? "api-key" : "bearer",
     modelId: env.FLASHLET_MODEL_ID || "local-model",
     apiKey: env.FLASHLET_MODEL_API_KEY || "local",
     contextWindow,

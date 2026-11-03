@@ -9,6 +9,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232e4534'/%3E%3Ctext x='7' y='23' fill='white' font-size='21'%3Et%3C/text%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/assets/katex.css" />
   </head>
   <body>
     <aside class="sidebar">
@@ -45,6 +46,7 @@
             <option value="">New task</option></select
           ><button id="mobile-new" aria-label="New task">＋</button>
         </div>
+        <button id="open-connectors">Connectors</button>
         <span class="mode-badge" id="mode-badge">READ ONLY</span>
       </header>
       <section class="chat-area" aria-label="Conversation">
@@ -147,6 +149,166 @@
         </p>
       </footer>
     </aside>
-    <script type="module" src="/app.js"></script>
+    <dialog id="connectors-dialog" class="settings-dialog">
+      <header>
+        <h2>Connectors</h2>
+        <button id="close-connectors" aria-label="Close connectors">
+          Close
+        </button>
+      </header>
+      <p>
+        Connect your student workspace. Credentials stay on this machine.
+        Changes apply to new tasks.
+      </p>
+      <div id="connector-notice" role="status"></div>
+      <details id="mcp-editor">
+        <summary>Edit mcp.json (global / project)</summary>
+        <label
+          >Configuration scope<select id="mcp-scope">
+            <option value="global">Global (default)</option>
+            <option value="project">This project (.pi/mcp.json)</option>
+          </select></label
+        >
+        <code id="mcp-location"></code>
+        <p>
+          Use pi's mcpServers format. Exposure defaults to codemode. Existing
+          secret values and command arguments are masked. Keep the mask to
+          preserve them; use environment references for project secrets.
+        </p>
+        <label
+          >mcp.json<textarea
+            id="mcp-json"
+            rows="14"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+          ></textarea>
+        </label>
+        <div id="mcp-editor-notice" role="status"></div>
+        <button id="mcp-save" type="button">Validate and save JSON</button
+        ><button id="mcp-reload" type="button">Reload JSON</button
+        ><button id="mcp-trust" type="button">Trust this project</button>
+      </details>
+      <div id="connector-list"></div>
+      <pre id="connector-status" aria-live="polite"></pre>
+      <a id="oauth-link" target="_blank" rel="noopener noreferrer" hidden
+        >Continue sign-in in your browser</a
+      >
+      <form id="redirect-form" hidden>
+        <label
+          >Callback URL (only if automatic sign-in cannot reach this
+          machine)<input id="redirect-url" autocomplete="off" /></label
+        ><button>Complete sign-in</button
+        ><button type="button" id="cancel-oauth">Cancel sign-in</button>
+      </form>
+      <form id="connector-form" autocomplete="off">
+        <h3>Add or replace connector</h3>
+        <label
+          >Preset<select id="connector-preset" name="preset">
+            <option value="custom">Custom MCP</option>
+            <option value="gmail">Gmail (own server or Google preview)</option>
+            <option value="notion">Notion</option>
+          </select></label
+        >
+        <label
+          >Name<input
+            id="connector-name"
+            name="name"
+            required
+            pattern="[a-zA-Z0-9_-]+"
+            maxlength="64"
+            placeholder="my-notion"
+        /></label>
+        <label
+          >Streamable HTTP URL<input
+            id="connector-url"
+            name="url"
+            placeholder="https://example.com/mcp"
+        /></label>
+        <label
+          >Bearer token (optional)<input
+            id="connector-token"
+            name="token"
+            type="password"
+        /></label>
+        <details>
+          <summary>OAuth client or custom headers</summary>
+          <p>
+            Leave blank for automatic OAuth. Pi identity is fine. Gmail requires
+            your own OAuth client. Register http://127.0.0.1:8765/callback when
+            using port 8765 below.
+          </p>
+          <label>Client ID<input name="clientId" /></label>
+          <label
+            >Client secret<input
+              id="connector-secret"
+              name="clientSecret"
+              type="password"
+          /></label>
+          <label
+            >Callback port<input
+              name="callbackPort"
+              type="number"
+              min="1024"
+              max="65535"
+              placeholder="8765"
+          /></label>
+          <label>Scope<input name="scope" /></label>
+          <label
+            >Headers JSON (e.g. API key)<textarea
+              name="headers"
+              placeholder='{"X-API-Key":"..."}'
+            ></textarea>
+          </label>
+        </details>
+        <details>
+          <summary>Local stdio server (runs a trusted executable)</summary>
+          <label>Command<input name="command" placeholder="npx" /></label>
+          <label
+            >Arguments JSON<textarea
+              name="args"
+              placeholder='["-y", "your-mcp-package"]'
+            ></textarea>
+          </label>
+          <label
+            >Environment JSON<textarea
+              name="env"
+              placeholder='{"API_KEY":"${MY_API_KEY}"}'
+            ></textarea>
+          </label>
+        </details>
+        <label class="checkbox"
+          ><input
+            id="connector-readonly"
+            name="readOnly"
+            type="checkbox"
+            checked
+          />
+          Read-only tools only</label
+        >
+        <p>
+          Gmail allows send/draft by default. Restrict it here or on its
+          connector card. Other connectors default to read-only; their writes
+          also require FLASHLET_ALLOW_WRITES=true. Server read-only hints are
+          trusted metadata, not proof.
+        </p>
+        <button type="submit">Save connector</button>
+      </form>
+    </dialog>
+    <dialog id="artifact-dialog" class="artifact-dialog">
+      <header>
+        <h2 id="artifact-title">Artifact</h2>
+        <button id="close-artifact">Close</button>
+      </header>
+      <p>Static, isolated preview. Scripts and network are disabled.</p>
+      <iframe
+        id="artifact-frame"
+        title="Sandboxed artifact preview"
+        sandbox=""
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </dialog>
+    <script type="module" src="/assets/connectors.js"></script>
+    <script type="module" src="/assets/app.js"></script>
   </body>
 </html>

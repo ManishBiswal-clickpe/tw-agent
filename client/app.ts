@@ -1,8 +1,33 @@
-const $ = (id) => document.getElementById(id);
-const tasks = [];
-let current = null;
-let config;
-async function api(url, options = {}) {
+import { renderMarkdown } from "./renderer.ts";
+import {
+  errorMessage,
+  type Task,
+  type ChatMessage,
+  type PublicConfig,
+  type FileEntry,
+  type TaskEvents,
+} from "./types.ts";
+type SpecialElements = {
+  prompt: HTMLTextAreaElement;
+  "prompt-form": HTMLFormElement;
+  "mobile-tasks": HTMLSelectElement;
+  send: HTMLButtonElement;
+  stop: HTMLButtonElement;
+  "new-task": HTMLButtonElement;
+};
+function $<K extends string>(
+  id: K,
+): K extends keyof SpecialElements ? SpecialElements[K] : HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Missing UI element: ${id}`);
+  return element as K extends keyof SpecialElements
+    ? SpecialElements[K]
+    : HTMLElement;
+}
+const tasks: Task[] = [];
+let current: Task | null = null;
+let config: PublicConfig;
+async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -11,36 +36,33 @@ async function api(url, options = {}) {
       ...options.headers,
     },
   });
-  if (response.status === 204) return;
+  if (response.status === 204) return undefined as T;
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Request failed");
-  return data;
+  return data as T;
 }
 function notice(text = "") {
   $("notice").textContent = text;
   $("notice").hidden = !text;
 }
-function textNode(tag, text, className) {
+function textNode<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  text: string,
+  className = "",
+): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.textContent = text;
   if (className) node.className = className;
   return node;
 }
-function renderText(body, text) {
-  // Never inject model output as HTML. Only fenced code blocks receive formatting.
-  body.replaceChildren();
-  text.split("```").forEach((part, index) => {
-    if (index % 2) {
-      const pre = document.createElement("pre");
-      pre.append(textNode("code", part.replace(/^[\w+-]*\n/, "")));
-      body.append(pre);
-    } else body.append(document.createTextNode(part));
-  });
+function renderText(body: HTMLElement, text: string) {
+  renderMarkdown(body, text);
 }
-function message(role, content) {
+
+function message(role: ChatMessage["role"], content: string): ChatMessage {
   return { role, content, tools: [] };
 }
-function addMessage(container, item) {
+function addMessage(container: HTMLElement, item: ChatMessage) {
   const el = textNode("article", "", `message ${item.role}`);
   el.append(
     textNode(
@@ -70,7 +92,7 @@ function addMessage(container, item) {
 }
 function render() {
   $("tasks").replaceChildren();
-  $("task-count").textContent = tasks.length;
+  $("task-count").textContent = String(tasks.length);
   if (!tasks.length)
     $("tasks").append(
       textNode("p", "Your tasks will appear here.", "muted empty-tasks"),
@@ -107,10 +129,10 @@ function render() {
   $("prompt").disabled = !!current?.busy;
 }
 function scroll() {
-  const area = document.querySelector(".chat-area");
+  const area = document.querySelector<HTMLElement>(".chat-area")!;
   area.scrollTop = area.scrollHeight;
 }
-function ensureAssistant(task) {
+function ensureAssistant(task: Task) {
   let item = task.messages.at(-1);
   if (!item || item.role !== "assistant") {
     item = message("assistant", "");
@@ -121,11 +143,17 @@ function ensureAssistant(task) {
 async function newTask() {
   $("new-task").disabled = true;
   try {
-    const { id } = await api("/api/sessions", { method: "POST", body: "{}" });
-    const task = { id, title: "New task", messages: [], busy: false };
+    const { id } = await api<{ id: string }>("/api/sessions", {
+      method: "POST",
+      body: "{}",
+    });
+    const task: Task = { id, title: "New task", messages: [], busy: false };
     const stream = new EventSource(`/api/sessions/${id}/events`);
     task.stream = stream;
-    const listen = (name, handler) =>
+    const listen = <K extends keyof TaskEvents>(
+      name: K,
+      handler: (data: TaskEvents[K]) => void,
+    ) =>
       stream.addEventListener(name, (event) => {
         handler(JSON.parse(event.data));
         if (current === task) {
@@ -173,7 +201,7 @@ async function newTask() {
     render();
     return task;
   } catch (error) {
-    notice(error.message);
+    notice(errorMessage(error));
     throw error;
   } finally {
     $("new-task").disabled = false;
@@ -194,10 +222,10 @@ $("new-task").onclick = async () => {
       return;
     try {
       await api(`/api/sessions/${oldest.id}`, { method: "DELETE" });
-      oldest.stream.close();
+      oldest.stream?.close();
       tasks.splice(tasks.indexOf(oldest), 1);
     } catch (error) {
-      return notice(error.message);
+      return notice(errorMessage(error));
     }
   }
   try {
@@ -237,7 +265,7 @@ $("prompt-form").onsubmit = async (event) => {
     render();
     scroll();
   } catch (error) {
-    notice(error.message);
+    notice(errorMessage(error));
   } finally {
     submitting = false;
     $("send").disabled = false;
@@ -257,18 +285,22 @@ $("stop").onclick = async () => {
       body: "{}",
     });
   } catch (error) {
-    notice(error.message);
+    notice(errorMessage(error));
   }
 };
-for (const button of document.querySelectorAll("[data-prompt]"))
+for (const button of document.querySelectorAll<HTMLButtonElement>(
+  "[data-prompt]",
+))
   button.onclick = () => {
-    $("prompt").value = button.dataset.prompt;
+    $("prompt").value = button.dataset.prompt || "";
     $("prompt").focus();
   };
 let directory = "";
 async function loadFiles(dir = directory) {
   try {
-    const { files } = await api(`/api/files?path=${encodeURIComponent(dir)}`);
+    const { files } = await api<{ files: FileEntry[] }>(
+      `/api/files?path=${encodeURIComponent(dir)}`,
+    );
     directory = dir;
     $("file-list").replaceChildren();
     $("file-list").hidden = false;
@@ -293,23 +325,25 @@ async function loadFiles(dir = directory) {
       $("file-list").append(row);
     }
   } catch (error) {
-    $("file-list").replaceChildren(textNode("p", error.message, "muted"));
+    $("file-list").replaceChildren(textNode("p", errorMessage(error), "muted"));
   }
 }
-async function openFile(path) {
+async function openFile(path: string) {
   try {
-    const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
+    const data = await api<{ path: string; content: string }>(
+      `/api/file?path=${encodeURIComponent(path)}`,
+    );
     $("file-name").textContent = data.path;
     $("file-content").textContent = data.content;
     $("file-list").hidden = true;
     $("file-preview").hidden = false;
   } catch (error) {
-    notice(error.message);
+    notice(errorMessage(error));
   }
 }
 async function loadDiff() {
   try {
-    const data = await api("/api/diff");
+    const data = await api<{ content: string; note: string }>("/api/diff");
     $("diff-note").textContent = data.note;
     $("diff-content").replaceChildren();
     let added = 0,
@@ -330,7 +364,7 @@ async function loadDiff() {
     $("diff-count").textContent = `+${added} −${removed}`;
     if (!data.content) $("diff-content").textContent = "No tracked changes.";
   } catch (error) {
-    $("diff-note").textContent = error.message;
+    $("diff-note").textContent = errorMessage(error);
   }
 }
 $("back-files").onclick = () => loadFiles();
@@ -338,9 +372,9 @@ $("refresh").onclick = () => {
   void loadFiles();
   void loadDiff();
 };
-function tab(changes) {
-  $("files-tab").setAttribute("aria-selected", !changes);
-  $("changes-tab").setAttribute("aria-selected", changes);
+function tab(changes: boolean) {
+  $("files-tab").setAttribute("aria-selected", String(!changes));
+  $("changes-tab").setAttribute("aria-selected", String(changes));
   $("files-panel").hidden = changes;
   $("changes-panel").hidden = !changes;
   if (changes) void loadDiff();
@@ -348,7 +382,7 @@ function tab(changes) {
 $("files-tab").onclick = () => tab(false);
 $("changes-tab").onclick = () => tab(true);
 try {
-  config = await api("/api/config");
+  config = await api<PublicConfig>("/api/config");
   $("workspace-name").textContent = config.workspace;
   $("composer-workspace").textContent = config.workspace;
   $("model-name").textContent = config.modelId;
@@ -362,7 +396,7 @@ try {
     );
   await loadFiles();
 } catch (error) {
-  notice(`Cannot connect to Flashlet: ${error.message}`);
+  notice(`Cannot connect to Flashlet: ${errorMessage(error)}`);
 }
 render();
 

@@ -1,14 +1,42 @@
-import express from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
+import type { AppConfig, AgentFactory, AgentHandle } from "./types.ts";
+interface SessionEntry {
+  id: string;
+  busy: boolean;
+  clients: Set<Response>;
+  history: { id: number; type: string; data: unknown }[];
+  seq: number;
+  lastUsed: number;
+  agent: AgentHandle | null;
+  unsubscribe?: () => void;
+}
+declare global {
+  namespace Express {
+    interface Request {
+      flashlet: SessionEntry;
+    }
+  }
+}
+import { McpConfigFiles } from "./mcp-config.ts";
+import { ConnectorStore, dataDirectory } from "./connectors.ts";
+import { connectorApi } from "./connector-api.ts";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { readConfig } from "./config.js";
-import { createLocalAgent } from "./agent.js";
-import { listFiles, previewFile, workspaceDiff } from "./files.js";
+import { readConfig } from "./config.ts";
+import { createLocalAgent } from "./agent.ts";
+import { listFiles, previewFile, workspaceDiff } from "./files.ts";
 
-export function createApp(config, agentFactory = createLocalAgent) {
+export function createApp(
+  config: AppConfig,
+  agentFactory: AgentFactory = createLocalAgent,
+) {
   const app = express();
-  const sessions = new Map();
+  const sessions = new Map<string, SessionEntry>();
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     // Loopback bind + Host and Origin checks prevent LAN exposure and DNS rebinding.
@@ -17,7 +45,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       `127.0.0.1:${config.port}`,
       `localhost:${config.port}`,
     ]);
-    if (!expected.has(host))
+    if (!host || !expected.has(host))
       return res
         .status(403)
         .json({ error: "Use the localhost address printed by the server." });
@@ -34,15 +62,23 @@ export function createApp(config, agentFactory = createLocalAgent) {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' blob:; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
     });
     next();
   });
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
   app.use(express.json({ limit: "32kb" }));
+  const closeConnectors = config.connectors
+    ? connectorApi(app, config.connectors, config, agentFactory)
+    : async () => {};
   app.get("/api/config", (_req, res) =>
     res.json({
       modelId: config.modelId,
       endpoint: config.baseUrl,
+      modelApi: config.modelApi || "openai-completions",
       workspace: path.basename(config.workspace),
       allowWrites: config.allowWrites,
     }),
@@ -50,7 +86,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
   app.get("/api/files", async (req, res) => {
     try {
       res.json({
-        files: await listFiles(config.workspace, req.query.path || ""),
+        files: await listFiles(
+          config.workspace,
+          typeof req.query.path === "string" ? req.query.path : "",
+        ),
       });
     } catch {
       res.status(400).json({ error: "Cannot open this directory" });
@@ -58,14 +97,17 @@ export function createApp(config, agentFactory = createLocalAgent) {
   });
   app.get("/api/file", async (req, res) => {
     try {
-      res.json(await previewFile(config.workspace, req.query.path));
+      res.json(
+        await previewFile(
+          config.workspace,
+          typeof req.query.path === "string" ? req.query.path : "",
+        ),
+      );
     } catch {
-      res
-        .status(400)
-        .json({
-          error:
-            "Cannot preview this file. It may be excluded, binary, outside the workspace, or over 200 KB.",
-        });
+      res.status(400).json({
+        error:
+          "Cannot preview this file. It may be excluded, binary, outside the workspace, or over 200 KB.",
+      });
     }
   });
   app.get("/api/diff", async (_req, res) =>
@@ -73,15 +115,13 @@ export function createApp(config, agentFactory = createLocalAgent) {
   );
   app.post("/api/sessions", async (_req, res, next) => {
     if (sessions.size >= 8)
-      return res
-        .status(429)
-        .json({
-          error:
-            "Eight sessions are open. Close a session or restart the server.",
-        });
+      return res.status(429).json({
+        error:
+          "Eight sessions are open. Close a session or restart the server.",
+      });
     // Reserve the slot before async initialization to bound concurrent creates.
     const id = randomUUID();
-    const entry = {
+    const entry: SessionEntry = {
       id,
       busy: false,
       clients: new Set(),
@@ -125,7 +165,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       next(error);
     }
   });
-  function emit(entry, type, data) {
+  function emit(entry: SessionEntry, type: string, data: unknown) {
     const item = { id: ++entry.seq, type, data };
     entry.history.push(item);
     if (entry.history.length > 2000) entry.history.shift();
@@ -137,7 +177,7 @@ export function createApp(config, agentFactory = createLocalAgent) {
       }
   }
   app.use("/api/sessions/:id", (req, res, next) => {
-    const entry = sessions.get(req.params.id);
+    const entry = sessions.get(String(req.params.id));
     if (!entry?.agent)
       return res
         .status(404)
@@ -180,8 +220,8 @@ export function createApp(config, agentFactory = createLocalAgent) {
     entry.busy = true;
     emit(entry, "run_start", {});
     res.status(202).json({ accepted: true });
-    entry.agent.session
-      .prompt(text.trim())
+    entry
+      .agent!.session.prompt(text.trim())
       .catch((error) => emit(entry, "run_error", { message: error.message }))
       .finally(() => {
         entry.busy = false;
@@ -190,10 +230,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
       });
   });
   app.post("/api/sessions/:id/abort", async (req, res) => {
-    await req.flashlet.agent.session.abort();
+    await req.flashlet.agent!.session.abort();
     res.json({ stopped: true });
   });
-  async function remove(entry) {
+  async function remove(entry: SessionEntry) {
     entry.unsubscribe?.();
     for (const client of entry.clients) client.end();
     entry.clients.clear();
@@ -216,21 +256,27 @@ export function createApp(config, agentFactory = createLocalAgent) {
   }, 60000);
   sweep.unref();
   app.use(express.static(fileURLToPath(new URL("../public", import.meta.url))));
-  app.use((error, _req, res, _next) => {
-    if (!res.headersSent)
-      res
-        .status(error.status || 500)
-        .json({
+  app.use(
+    (
+      error: Error & { status?: number },
+      _req: Request,
+      res: Response,
+      _next: NextFunction,
+    ) => {
+      if (!res.headersSent)
+        res.status(error.status || 500).json({
           error:
             error.status === 400
               ? "Invalid request body"
               : "Request failed. Check the model endpoint and server configuration.",
         });
-  });
+    },
+  );
   return {
     app,
     async close() {
       clearInterval(sweep);
+      await closeConnectors();
       await Promise.all([...sessions.values()].map(remove));
     },
   };
@@ -240,6 +286,12 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const config = readConfig();
+  const store = new ConnectorStore(dataDirectory());
+  await store.load();
+  const files = new McpConfigFiles(store.dir, config.workspace);
+  await files.initialize();
+  await store.attachFiles(files);
+  config.connectors = store;
   const { app, close } = createApp(config);
   const server = app.listen(config.port, "127.0.0.1", () =>
     console.log(
