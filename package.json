@@ -1,0 +1,28 @@
+{
+  "name": "flashlet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first browser workbench powered by the Pi coding agent SDK",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check server/index.js && node --check server/agent.js && node --check public/app.js",
+    "test:ui": "node test/ui-smoke.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "express": "5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  },
+  "overrides": {
+    "minimatch": "11.0.4",
+    "undici": "8.12.3"
+  }
+}
