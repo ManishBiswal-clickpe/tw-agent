@@ -1,4 +1,6 @@
 import express from "express";
+import { ConnectorStore, dataDirectory } from "./connectors.ts";
+import { connectorApi } from "./connector-api.ts";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -34,15 +36,23 @@ export function createApp(config, agentFactory = createLocalAgent) {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' blob:; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
     });
     next();
   });
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
   app.use(express.json({ limit: "32kb" }));
+  const closeConnectors = config.connectors
+    ? connectorApi(app, config.connectors, config, agentFactory)
+    : async () => {};
   app.get("/api/config", (_req, res) =>
     res.json({
       modelId: config.modelId,
       endpoint: config.baseUrl,
+      modelApi: config.modelApi || "openai-completions",
       workspace: path.basename(config.workspace),
       allowWrites: config.allowWrites,
     }),
@@ -60,12 +70,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
     try {
       res.json(await previewFile(config.workspace, req.query.path));
     } catch {
-      res
-        .status(400)
-        .json({
-          error:
-            "Cannot preview this file. It may be excluded, binary, outside the workspace, or over 200 KB.",
-        });
+      res.status(400).json({
+        error:
+          "Cannot preview this file. It may be excluded, binary, outside the workspace, or over 200 KB.",
+      });
     }
   });
   app.get("/api/diff", async (_req, res) =>
@@ -73,12 +81,10 @@ export function createApp(config, agentFactory = createLocalAgent) {
   );
   app.post("/api/sessions", async (_req, res, next) => {
     if (sessions.size >= 8)
-      return res
-        .status(429)
-        .json({
-          error:
-            "Eight sessions are open. Close a session or restart the server.",
-        });
+      return res.status(429).json({
+        error:
+          "Eight sessions are open. Close a session or restart the server.",
+      });
     // Reserve the slot before async initialization to bound concurrent creates.
     const id = randomUUID();
     const entry = {
@@ -218,19 +224,18 @@ export function createApp(config, agentFactory = createLocalAgent) {
   app.use(express.static(fileURLToPath(new URL("../public", import.meta.url))));
   app.use((error, _req, res, _next) => {
     if (!res.headersSent)
-      res
-        .status(error.status || 500)
-        .json({
-          error:
-            error.status === 400
-              ? "Invalid request body"
-              : "Request failed. Check the model endpoint and server configuration.",
-        });
+      res.status(error.status || 500).json({
+        error:
+          error.status === 400
+            ? "Invalid request body"
+            : "Request failed. Check the model endpoint and server configuration.",
+      });
   });
   return {
     app,
     async close() {
       clearInterval(sweep);
+      await closeConnectors();
       await Promise.all([...sessions.values()].map(remove));
     },
   };
@@ -240,6 +245,9 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const config = readConfig();
+  const store = new ConnectorStore(dataDirectory());
+  await store.load();
+  config.connectors = store;
   const { app, close } = createApp(config);
   const server = app.listen(config.port, "127.0.0.1", () =>
     console.log(

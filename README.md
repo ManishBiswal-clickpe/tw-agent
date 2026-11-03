@@ -4,7 +4,7 @@ A local-first coding workbench: browser UI → Node + Pi SDK → your OpenAI-com
 
 ## Quick start
 
-Requires **Node.js 22.19+** and a running model server that supports **streaming Chat Completions and tool calls**.
+Requires **Node.js 22.19+** and a model endpoint that supports **streaming Chat Completions or Responses and tool calls**. New connector, provider and rendering code is TypeScript; the original workbench stays JavaScript for an incremental migration.
 
 ```sh
 npm ci
@@ -36,6 +36,8 @@ Use the model ID actually exposed by your server (`/v1/models` is often useful).
 - View tracked working-tree changes against `HEAD`, with added/removed lines.
 - Run Pi's actual agent loop in Node, not a browser-side imitation or CLI subprocess.
 - Start read-only (`read`, `ls`, `find`, `grep`). Set `FLASHLET_ALLOW_WRITES=true` and restart to enable `bash`, `write`, and `edit`.
+- Add MCP connectors over streamable HTTP or stdio, OAuth or API-key/custom headers.
+- Render GFM markdown, highlighted code, KaTeX math, Mermaid diagrams and isolated static HTML/SVG artifacts.
 - Use a responsive three-panel desktop layout and compact mobile chat/task switcher.
 
 **Tasks are ephemeral:** browser refresh loses the task UI; restarting the server loses all conversations. Disconnected idle sessions are cleaned up after an hour. There are at most eight server sessions; use New task to replace the oldest idle task when the UI reaches that limit. This is a single-operator development tool, not a multi-user service.
@@ -44,18 +46,21 @@ Use the model ID actually exposed by your server (`/v1/models` is often useful).
 
 The HTTP server binds to `127.0.0.1`, validates Host/Origin, rejects cross-origin writes, and never sends the model API key to the browser. Do not expose it through a public proxy or tunnel. It has no login or remote-access security model.
 
-**Pi tools are not sandboxed.** Read-only mode prevents tool-driven writes, not access to every sensitive file. Tools run with your OS permissions and may read paths outside the configured workspace. Write/shell mode can modify or execute anything your user can. Use a disposable checkout, container or restricted OS user for untrusted code/model output. Global Pi credentials, extensions, skills and project instruction discovery are not loaded; the app uses an isolated temporary agent directory and in-memory history. This does not make model-generated tool calls safe.
+**Pi tools are not sandboxed.** Read-only mode prevents tool-driven writes, not access to every sensitive file. Tools run with your OS permissions and may read paths outside the configured workspace. Write/shell mode can modify or execute anything your user can. Use a disposable checkout, container or restricted OS user for untrusted code/model output. Global Pi credentials, extensions, skills and project instruction discovery are not loaded. Only the explicitly bundled MCP, tool-search and permission extensions load. Model sessions are in-memory; connector credentials persist in a private data directory. This does not make model-generated tool calls safe.
 
-The file browser rejects traversal/outside symlinks and hides `.env`, `.git`, common private-key files and dependency directories. Those are convenience protections, not a complete secret detector. Git diff omits `.env` and common private-key files; other tracked secrets could still appear. Do not select a workspace containing secrets. Model output is rendered as text, never raw HTML.
+The file browser rejects traversal/outside symlinks and hides `.env`, `.git`, common private-key files and dependency directories. Those are convenience protections, not a complete secret detector. Git diff omits `.env` and common private-key files; other tracked secrets could still appear. Do not select a workspace containing secrets. Model output uses sanitized markdown; raw HTML is escaped. Explicit artifact previews are isolated in a scriptless, network-disabled sandbox iframe.
 
 ## Architecture
 
 ```text
-public/           Plain JavaScript + CSS browser workbench (no build step)
+public/           Original JavaScript + CSS workbench; generated assets are gitignored
 server/index.js   Express, session lifecycle, SSE, same-origin checks
-server/agent.js   Pi SDK setup, local model provider, explicit tool allowlist
+server/agent.js   Pi SDK setup, model adapter, explicit extension factories
 server/files.js   File preview and tracked Git diff
 server/config.js Environment validation
+server/*.ts      Connector storage/API, MCP auth adapter, generic model transport
+client/*.ts      Connector panel, markdown and artifact renderer
+scripts/build.ts esbuild browser assets (npm run build)
 ```
 
 The SDK is pinned to `@earendil-works/pi-coding-agent@1.4.0`. The `minimatch` and `undici` overrides select patched transitive versions; the real SDK integration tests run against those versions. Configuration stays server-side. Model adapters/endpoint tuning can be added without changing the UI transport.
@@ -64,6 +69,7 @@ The SDK is pinned to `@earendil-works/pi-coding-agent@1.4.0`. The `minimatch` an
 
 ```sh
 npm run check
+npm run build
 npm test
 npm audit --omit=dev
 # Optional browser smoke test (system Chrome, or CHROME_PATH)
@@ -80,3 +86,54 @@ Pi SDK references: https://pi.dev/docs/latest/sdk and https://pi.dev/docs/latest
 - Add session persistence and resumable task history.
 - Add explicit tool approvals and OS-level execution isolation before broader use.
 - Improve the diff pane with file selection and untracked-file support.
+
+
+## MCP connectors
+
+Open **Connectors** in the top bar. Add Notion, Gmail, or any custom server. HTTP uses streamable HTTP (not legacy SSE). Stdio accepts one executable, JSON arguments and JSON environment variables. Commands are not shell strings. Installing/running a stdio server executes third-party code with your OS permissions. Only use servers you trust.
+
+- **Gmail:** send/draft tools enabled by default, as requested. A per-connector **Read-only / Allow writes** switch restricts or enables them independently of local filesystem write mode. You can use your existing Gmail MCP URL or stdio command with the Gmail preset, or Custom MCP. The official Google URL is only a convenience preset, not the only Gmail path. Actual tools depend on your server: the official server currently offers draft creation but no send tool.
+- **Notion/custom:** read-only by default. Only tools explicitly marked `readOnlyHint: true` run; unknown or mutation tools fail closed. To allow mutations, uncheck read-only AND enable `FLASHLET_ALLOW_WRITES=true` server-side. Server-provided hints are trusted metadata, not proof.
+- **OAuth:** Sign in opens a link using pi's native OAuth implementation. Loopback callback completes automatically; if using another machine, paste the final redirected URL in the panel. Tokens refresh using pi. Sign out removes stored tokens; Remove also signs out. Existing task sessions may retain cached tokens/connections. Close old tasks to fully revoke in-memory access. Adding/enabling connectors applies to new tasks; permission restrictions and disabling also gate existing task calls.
+- **API keys:** use Bearer token or Headers JSON (e.g. `{"X-API-Key":"${SERVICE_KEY}"}`). Environment variable references work server-side. Command interpolation (`!command`) is deliberately disabled in the panel. Never commit credentials.
+- **Storage:** `~/.flashlet` by default, overridden with `FLASHLET_DATA_DIR`. Directory mode 0700; connector config and OAuth tokens mode 0600. Plaintext at rest, so protect your OS account/disk. The API does not return tokens, headers, client secrets or stdio env. Use a data directory outside your workspace/repo. Do not expose this localhost app through a tunnel.
+
+Pi's own identity during OAuth is fine for this iteration. If a server needs a registered client, enter its client ID, secret, scope and callback port. Register the exact redirect `http://127.0.0.1:8765/callback` if using port 8765. OAuth brand comes from the authorization server/client registration, not the TypeScript SDK. Custom client naming is deferred.
+
+**Official Google Gmail MCP caveat:** Google documents its endpoint as Developer Preview and requiring a Cloud project, enabled Gmail/Gmail MCP APIs and an agent-enabled OAuth client. It may require Preview access; this is not a claim that your existing pi Gmail MCP is blocked. Use the server you already use if different. Google's `access_type=offline` requirement is not currently exposed through pi 1.4.0's OAuth settings, so its refresh-token behavior needs a real account test. Notion and arbitrary Gmail implementations may have different requirements. No Google approval flow is needed just to use a different/self-hosted Gmail MCP that already works for you.
+
+Email/documents/tool responses can contain prompt injection. The connector policy is a boundary, not a complete defense. Gmail write access allows actual sends if your server provides a send tool; review prompts carefully. There is no per-send confirmation dialog in this iteration. No real messages are sent by the tests.
+
+## Generic model endpoint (Azure, local or other compatible hosts)
+
+Use the same settings for any host. There is no Azure-specific provider or model dropdown:
+
+```dotenv
+FLASHLET_MODEL_BASE_URL=https://RESOURCE.openai.azure.com/openai/v1
+FLASHLET_MODEL_ID=YOUR-DEPLOYMENT-NAME
+FLASHLET_MODEL_API_KEY=YOUR-KEY
+FLASHLET_MODEL_API=responses
+FLASHLET_MODEL_AUTH_HEADER=bearer
+# Leave blank for v1:
+FLASHLET_MODEL_API_VERSION=
+```
+
+Use `FLASHLET_MODEL_API=completions` for llama.cpp/vLLM or compatible Chat Completions endpoints. `responses` selects `/responses`. The base URL is the API prefix, not the full operation path. For Azure v1, use `/openai/v1`, pass the deployment name as model, and omit `api-version`. Both bearer API-key auth and explicit `api-key` header are supported (`FLASHLET_MODEL_AUTH_HEADER=api-key`). Optional `FLASHLET_MODEL_API_VERSION` appends an `api-version` query parameter for compatible gateways. It does **not** automatically translate all legacy Azure deployment-specific routes. Entra automatic token refresh is not included. Keys remain in server environment only.
+
+## Renderer
+
+Markdown includes tables, lists, code highlighting and KaTeX. HTML in ordinary messages is escaped, then generated HTML is sanitized. Fenced `html`/`svg` blocks get a manual Preview artifact button. Artifacts are static only, with no scripts, network, forms, parent-page access or popups. Fenced `mermaid` blocks render on demand under strict security; exported SVG goes into the same sandbox. Arbitrary MCP Apps (`ui://` resources) are not rendered. Browser assets are built locally with esbuild; no CDN dependencies.
+
+## Verification details and limits
+
+Tests cover real pi SDK MCP stdio discovery, fail-closed tool-call hooks, OAuth DCR + PKCE loopback callback and persisted tokens against a local HTTP fixture, generic provider wire-level path/header/query/deployment behavior, plus the original chat/tool loop. Browser tests cover connector save, presets, mobile overflow, markdown/math/code, escaped raw HTML, and script-blocked artifact preview. `npm audit --omit=dev` is clean at implementation time.
+
+Not yet tested against a real Gmail/Notion account, Azure deployment or local LFM/vLLM server. No RL/training changes. Pi's MCP token store classes are internal SDK modules in 1.4.0; a small pinned compatibility adapter supplies isolated auth/log paths because SDK defaults otherwise use global `~/.pi`. Upgrade that SDK only with the OAuth integration test passing. This PR does not enable arbitrary pi package installation or publish a pi package: the browser host and its explicit extension list remain controlled by this app.
+
+References:
+- https://pi.dev/docs/latest/mcp
+- https://pi.dev/docs/latest/sdk
+- https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server
+- https://developers.notion.com/guides/mcp/overview
+- https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
+- https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/endpoints

@@ -1,3 +1,4 @@
+import { renderMarkdown } from "/assets/renderer.js";
 const $ = (id) => document.getElementById(id);
 const tasks = [];
 let current = null;
@@ -26,17 +27,8 @@ function textNode(tag, text, className) {
   if (className) node.className = className;
   return node;
 }
-function renderText(body, text) {
-  // Never inject model output as HTML. Only fenced code blocks receive formatting.
-  body.replaceChildren();
-  text.split("```").forEach((part, index) => {
-    if (index % 2) {
-      const pre = document.createElement("pre");
-      pre.append(textNode("code", part.replace(/^[\w+-]*\n/, "")));
-      body.append(pre);
-    } else body.append(document.createTextNode(part));
-  });
-}
+function renderText(body, text) { renderMarkdown(body, text); }
+
 function message(role, content) {
   return { role, content, tools: [] };
 }

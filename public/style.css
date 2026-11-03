@@ -749,3 +749,166 @@ textarea::placeholder {
     font-size: 7px;
   }
 }
+
+/* Connector and artifact panels remain usable on a phone. */
+dialog {
+  color: #26382b;
+  background: #fafbf7;
+  border: 1px solid #cbd5c8;
+  border-radius: 16px;
+  box-shadow: 0 20px 80px #142d2940;
+  padding: 24px;
+}
+dialog::backdrop {
+  background: #13251d80;
+}
+dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+dialog h2 {
+  margin: 0;
+}
+dialog p {
+  line-height: 1.6;
+}
+.settings-dialog {
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100dvh - 32px);
+}
+.settings-dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-dialog input,
+.settings-dialog textarea,
+.settings-dialog select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5c8;
+  border-radius: 6px;
+  font: 14px system-ui;
+  background: white;
+  color: #26382b;
+}
+.settings-dialog textarea {
+  min-height: 70px;
+}
+.settings-dialog .checkbox {
+  display: flex;
+  align-items: center;
+}
+.settings-dialog .checkbox input {
+  width: auto;
+}
+.settings-dialog button,
+.artifact-button,
+#open-connectors,
+.artifact-dialog button {
+  border: 1px solid #cbd5c8;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: white;
+  color: #26382b;
+  margin: 3px;
+  cursor: pointer;
+}
+.connector-card {
+  border: 1px solid #cbd5c8;
+  padding: 14px;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.connector-card p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+#connector-notice {
+  margin: 12px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+#connector-status {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-height: 180px;
+  overflow: auto;
+}
+.artifact-dialog {
+  width: min(1000px, calc(100vw - 24px));
+}
+#artifact-frame {
+  width: 100%;
+  height: 65dvh;
+  border: 1px solid #cbd5c8;
+  background: white;
+}
+.message-body {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.message-body pre {
+  white-space: pre;
+  overflow: auto;
+  max-width: 100%;
+}
+.message-body table {
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+}
+.message-body td,
+.message-body th {
+  border: 1px solid #d8dfd4;
+  padding: 8px 12px;
+}
+.message-body blockquote {
+  border-left: 3px solid #879e82;
+  padding-left: 14px;
+  margin-left: 0;
+  color: #64745e;
+}
+.message-body img {
+  max-width: 100%;
+}
+.message-body .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in {
+  color: #80519c;
+}
+.hljs-string,
+.hljs-attr {
+  color: #28705a;
+}
+.hljs-number,
+.hljs-literal {
+  color: #a15a27;
+}
+.hljs-comment {
+  color: #7d8878;
+}
+@media (max-width: 600px) {
+  dialog {
+    padding: 16px;
+  }
+  .topbar {
+    gap: 6px;
+  }
+  #open-connectors {
+    padding: 6px;
+    font-size: 11px;
+  }
+  .mode-badge {
+    font-size: 9px;
+  }
+}
