@@ -3,6 +3,8 @@ import { chromium } from "@playwright/test";
 import { createApp } from "../server/index.ts";
 import { readConfig } from "../server/config.ts";
 import { ConnectorStore } from "../server/connectors.ts";
+import { startMockModel } from "./mock-model.ts";
+const mock = await startMockModel();
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -15,13 +17,17 @@ const files = new McpConfigFiles(dir, project);
 await files.initialize();
 await store.attachFiles(files);
 const config = {
-  ...readConfig({ PORT: "3210", FLASHLET_WORKSPACE: project }),
+  ...readConfig({
+    PORT: "3210",
+    FLASHLET_WORKSPACE: project,
+    FLASHLET_MODEL_BASE_URL: mock.url,
+  }),
   connectors: store,
 };
 const app = createApp(config);
 const server = app.app.listen(3210, "127.0.0.1");
 const browser = await chromium.launch({
-  executablePath: "/usr/bin/google-chrome",
+  executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome",
   headless: true,
   args: ["--no-sandbox"],
 });
@@ -113,19 +119,11 @@ try {
     .filter({ hasText: "Trust this project" })
     .waitFor();
   await page.locator("#close-connectors").click();
-  await page.evaluate(async () => {
-    const { renderMarkdown } = await import(String("/assets/renderer.js"));
-    document.querySelector<HTMLElement>("#welcome")!.hidden = true;
-    const body = document.createElement("div");
-    body.className = "message-body";
-    body.id = "render-test";
-    document.querySelector("#messages")!.append(body);
-    renderMarkdown(
-      body,
-      "# Revision notes\n\n**Gradient descent** updates weights.\n\n| Week | Topic |\n| --- | --- |\n| 1 | Calculus |\n\n$E=mc^2$\n\n```js\nconst learningRate = 0.01;\n```\n\n```html\n<h1>Study planner</h1><style>h1{color:green}</style><script>parent.hacked=true</script>\n```\n\n<img src=x onerror=alert(1)>",
-    );
-  });
-  if (await page.locator("#render-test img").count())
+  // Markdown safety through a real chat (mock model returns the payload).
+  await page.getByLabel("Message").fill("markdown check");
+  await page.keyboard.press("Enter");
+  await page.getByText("Revision notes").waitFor();
+  if (await page.locator(".markdown img").count())
     throw Error("Raw HTML escaped incorrectly");
   await page.locator(".artifact-button").click();
   await page.screenshot({
@@ -142,17 +140,10 @@ try {
   )
     throw Error("Sandbox escaped");
   await page.locator("#close-artifact").click();
-  await page.evaluate(async () => {
-    const { renderMarkdown } = await import(String("/assets/renderer.js"));
-    const body = document.createElement("div");
-    body.id = "diagram-test";
-    document.querySelector("#messages")!.append(body);
-    renderMarkdown(
-      body,
-      "```mermaid\ngraph LR\nA[Read notes] --> B[Revise]\n```",
-    );
-  });
-  await page.locator("#diagram-test button").click();
+  await page.locator(".send.stop").waitFor({ state: "detached" });
+  await page.getByLabel("Message").fill("diagram check");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Render diagram" }).click();
   await page.locator("#artifact-frame").contentFrame().locator("svg").waitFor();
 
   await page
@@ -178,5 +169,6 @@ try {
   await browser.close();
   await app.close();
   await new Promise<void>((r) => server.close(() => r()));
+  await mock.close();
   await rm(dir, { recursive: true, force: true });
 }

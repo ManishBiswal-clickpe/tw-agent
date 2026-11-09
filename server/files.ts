@@ -12,6 +12,9 @@ const excluded = new Set([
   "dist",
   "build",
   "coverage",
+  "__pycache__",
+  ".pytest_cache",
+  ".venv",
 ]);
 export function visible(name: string) {
   return (
@@ -59,30 +62,52 @@ export async function previewFile(root: string, relative: string) {
   return { path: relative, content };
 }
 export async function workspaceDiff(root: string) {
+  const git = (args: string[]) =>
+    exec("git", args, { cwd: root, maxBuffer: 300000, timeout: 5000 });
   try {
-    const { stdout } = await exec(
-      "git",
-      [
-        "diff",
-        "HEAD",
-        "--",
-        ".",
-        ":!package-lock.json",
-        ":!.env",
-        ":!.env.*",
-        ":!*.pem",
-        ":!*.key",
-      ],
-      { cwd: root, maxBuffer: 300000, timeout: 5000 },
-    );
+    const { stdout } = await git([
+      "diff",
+      "HEAD",
+      "--",
+      ".",
+      ":!package-lock.json",
+      ":!.env",
+      ":!.env.*",
+      ":!*.pem",
+      ":!*.key",
+    ]);
+    // New files the agent created are untracked; show them as additions too.
+    let untracked = "";
+    const { stdout: others } = await git([
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+    ]);
+    const files = others
+      .split("\n")
+      .filter((f) => f && f.split("/").every(visible))
+      .slice(0, 25);
+    for (const file of files) {
+      try {
+        const info = await stat(path.join(root, file));
+        if (info.size > 100000) continue;
+        await git(["diff", "--no-index", "--", "/dev/null", file]);
+      } catch (error) {
+        // git diff --no-index exits 1 when files differ; stdout holds the diff.
+        const out = (error as { stdout?: string }).stdout;
+        if (out) untracked += out;
+      }
+    }
     return {
-      content: stdout,
-      note: "Tracked changes against HEAD. Untracked files are not included.",
+      content: stdout + untracked,
+      note: files.length
+        ? `Tracked changes against HEAD, plus ${files.length} new untracked file${files.length === 1 ? "" : "s"}.`
+        : "Tracked changes against HEAD.",
     };
   } catch {
     return {
       content: "",
-      note: "Git diff unavailable. The workspace needs a Git repository with an initial commit.",
+      note: "Git diff unavailable. The folder needs a Git repository with an initial commit.",
     };
   }
 }

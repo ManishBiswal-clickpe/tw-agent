@@ -8,13 +8,19 @@
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx"
   },
   "include": [
     "server/**/*.ts",
     "client/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts",
-    "shared/**/*.ts"
+    "shared/**/*.ts",
+    "client/**/*.tsx"
   ]
 }

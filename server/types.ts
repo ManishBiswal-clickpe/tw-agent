@@ -24,6 +24,10 @@ export interface AppConfig {
   modelApi: "openai-completions" | "openai-responses";
   authHeader: "bearer" | "api-key";
   apiVersion?: string;
+  /** off | minimal | low | medium | high | xhigh. Non-off requests visible reasoning. */
+  thinking: ThinkingSetting;
+  /** Directory for folders.json and persisted chats. Unset = in-memory only (tests). */
+  dataDir?: string;
   connectors?: ConnectorStore;
   connectorUi?: ConnectorUI;
 }
@@ -31,4 +35,24 @@ export interface AgentHandle {
   session: AgentSession;
   dispose(): Promise<void>;
 }
-export type AgentFactory = (config: AppConfig) => Promise<AgentHandle>;
+export const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+export type ThinkingSetting = (typeof THINKING_LEVELS)[number];
+export interface AgentOptions {
+  /** Working directory for tools. Defaults to config.workspace. */
+  cwd?: string;
+  /** Persisted chat directory. Unset = in-memory session. */
+  sessionDir?: string;
+  /** Existing session file to resume. */
+  sessionFile?: string;
+}
+export type AgentFactory = (
+  config: AppConfig,
+  options?: AgentOptions,
+) => Promise<AgentHandle>;

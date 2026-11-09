@@ -1,7 +1,7 @@
 import path from "node:path";
 import { realpathSync, statSync } from "node:fs";
 
-import type { AppConfig } from "./types.ts";
+import { THINKING_LEVELS, type AppConfig, type ThinkingSetting } from "./types.ts";
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const number = (key: string, fallback: number, max: number) => {
@@ -26,7 +26,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("FLASHLET_WORKSPACE must be a directory");
   const contextWindow = number("FLASHLET_CONTEXT_WINDOW", 32768, 2000000);
   const maxTokens = number("FLASHLET_MAX_TOKENS", 4096, contextWindow);
+  const thinking = (env.FLASHLET_THINKING || "off") as ThinkingSetting;
+  if (!THINKING_LEVELS.includes(thinking))
+    throw new Error("Invalid FLASHLET_THINKING");
   return {
+    thinking,
     port: number("PORT", 3210, 65535),
     workspace,
     baseUrl: baseUrl.href.replace(/\/$/, ""),
