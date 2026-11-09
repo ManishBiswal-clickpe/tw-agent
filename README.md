@@ -30,6 +30,10 @@ FLASHLET_THINKING=off
 
 Use the model ID actually exposed by your server (`/v1/models` is often useful). FreeToken and llama.cpp are intended targets, but their model-specific tool-call templates and compatibility still need testing. There is no claim that every OpenAI-compatible endpoint supports agent tool calls. Match the context/output limits to the loaded model. If your server requires authentication, set `FLASHLET_MODEL_API_KEY` in `.env`. For a server on another machine, the configured endpoint can send code and prompts there, so choose it deliberately.
 
+## Technical Writing presentation
+
+Slides from the 7th-semester Technical Writing evaluation (IIIT Bhubaneswar, November 2026): [PDF](docs/presentation/tw_presentation.pdf) · [PowerPoint](docs/presentation/tw_presentation.pptx).
+
 ## Screenshots
 
 | | |
