@@ -30,6 +30,17 @@ FLASHLET_THINKING=off
 
 Use the model ID actually exposed by your server (`/v1/models` is often useful). FreeToken and llama.cpp are intended targets, but their model-specific tool-call templates and compatibility still need testing. There is no claim that every OpenAI-compatible endpoint supports agent tool calls. Match the context/output limits to the loaded model. If your server requires authentication, set `FLASHLET_MODEL_API_KEY` in `.env`. For a server on another machine, the configured endpoint can send code and prompts there, so choose it deliberately.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Home: folders with saved chats, starting points and the folder's files](docs/screenshots/home.png) | ![A real run: reasoning, then tool calls with input and output](docs/screenshots/agent-run.png) |
+| **Home.** Folders with their saved chats (left), starting points (centre), the folder's files (right). | **A real run on a lab sheet.** The model's reasoning, then tool calls to list the folder, read the README and inspect it with a shell command. |
+
+![End of the run: the agent's 10/10 test output and the new files in the Changes view](docs/screenshots/run-result-changes.png)
+
+**End of the run.** The agent's test output (10/10) in the chat and the new files in the Changes view. Screenshots taken with a hosted model; the endpoint URL is redacted.
+
 ## What it does
 
 - **Folders and chats.** Add any project directory as a folder; each chat runs with that folder as the agent's workspace. Chats are grouped under their folder in the sidebar.
