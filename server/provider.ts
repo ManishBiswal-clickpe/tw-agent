@@ -44,11 +44,14 @@ export function providerConfig(config: AppConfig): ProviderConfig {
         type: "chat",
         id: config.modelId,
         name: config.modelId,
-        reasoning: false,
+        reasoning: config.thinking !== "off",
         input: ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: config.contextWindow,
         maxTokens: config.maxTokens,
+        // Send reasoning_effort only when thinking is requested; llama.cpp/vLLM
+        // stream reasoning_content, which Pi surfaces as thinking deltas.
+        compat: { supportsReasoningEffort: config.thinking !== "off" },
       },
     ],
   };

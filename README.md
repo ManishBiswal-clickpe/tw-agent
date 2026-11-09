@@ -24,14 +24,19 @@ FLASHLET_MODEL_ID=local-model
 FLASHLET_CONTEXT_WINDOW=32768
 FLASHLET_MAX_TOKENS=4096
 FLASHLET_ALLOW_WRITES=false
+# off | low | medium | high: show the model's reasoning (reasoning models only)
+FLASHLET_THINKING=off
 ```
 
 Use the model ID actually exposed by your server (`/v1/models` is often useful). FreeToken and llama.cpp are intended targets, but their model-specific tool-call templates and compatibility still need testing. There is no claim that every OpenAI-compatible endpoint supports agent tool calls. Match the context/output limits to the loaded model. If your server requires authentication, set `FLASHLET_MODEL_API_KEY` in `.env`. For a server on another machine, the configured endpoint can send code and prompts there, so choose it deliberately.
 
 ## What it does
 
-- Stream chat responses over SSE and show Pi tool calls/results.
-- Keep separate tasks in memory, with task switching and cancellation.
+- **Folders and chats.** Add any project directory as a folder; each chat runs with that folder as the agent's workspace. Chats are grouped under their folder in the sidebar.
+- **Chats persist.** Every chat is saved as a Pi session file under `~/.flashlet/chats/<folder>/`. Refreshing the page or restarting the server keeps them; opening an old chat reads the file without starting an agent, and sending a message resumes it. Refreshing mid-answer replays the live turn.
+- **Visible thinking.** With `FLASHLET_THINKING` set (or the composer's thinking selector), the model's reasoning streams into a collapsible "Thinking" block above the answer and is saved with the chat. Works with endpoints that stream `reasoning_content` (DeepSeek, Qwen3, llama.cpp).
+- Stream chat responses over SSE and show Pi tool calls/results as cards with inputs and outputs.
+- Cancel a running answer with Stop.
 - Explore workspace files and preview text files up to 200 KB.
 - View tracked working-tree changes against `HEAD`, with added/removed lines.
 - Run Pi's actual agent loop in Node, not a browser-side imitation or CLI subprocess.
@@ -40,7 +45,7 @@ Use the model ID actually exposed by your server (`/v1/models` is often useful).
 - Render GFM markdown, highlighted code, KaTeX math, Mermaid diagrams and isolated static HTML/SVG artifacts.
 - Use a responsive three-panel desktop layout and compact mobile chat/task switcher.
 
-**Tasks are ephemeral:** browser refresh loses the task UI; restarting the server loses all conversations. Disconnected idle sessions are cleaned up after an hour. There are at most eight server sessions; use New task to replace the oldest idle task when the UI reaches that limit. This is a single-operator development tool, not a multi-user service.
+At most eight chats hold a live agent at once; the least recently used idle chat is released (it stays saved and reopens on the next message). An answer that is still running when the server stops is lost, but everything before it is saved. Folders are listed in `~/.flashlet/folders.json`; removing a folder only hides it, files on disk are never touched. This is a single-operator development tool, not a multi-user service.
 
 ## Safety boundaries
 
@@ -53,14 +58,18 @@ The file browser rejects traversal/outside symlinks and hides `.env`, `.git`, co
 ## Architecture
 
 ```text
-public/           HTML + CSS; generated browser JavaScript is gitignored
-server/index.ts   Express, session lifecycle, SSE, same-origin checks
-server/agent.ts   Typed Pi SDK setup, model adapter, explicit extension factories
-server/files.ts   File preview and tracked Git diff
-server/config.ts Environment validation
-server/*.ts      Typed Express/session lifecycle, config/files/agent, connector API and model transport
-client/*.ts      Typed chat/tasks, connector panel, markdown and artifact renderer
-scripts/build.ts esbuild browser assets (npm run build)
+public/                index.html shell + style.css; generated JS in public/assets is gitignored
+client/main.tsx        React app: TanStack Router (/f/:folder/c/:chat) + TanStack Query
+client/useChat.ts      Chat state: saved transcript + live SSE (thinking, text, tools)
+client/components/     Sidebar (folders/chats), Message, Composer, Inspector, Connectors, Modal
+client/markdown.ts     Sanitized markdown, highlighting, KaTeX, Mermaid, artifact buttons
+server/index.ts        Express, folder/chat API, session lifecycle, SSE, same-origin checks
+server/folders.ts      Folder store (folders.json)
+server/transcript.ts   Pi session messages -> UI blocks
+server/agent.ts        Typed Pi SDK setup: per-folder cwd, persisted sessions, thinking level
+server/files.ts        File preview and Git diff (tracked + new files)
+server/config.ts       Environment validation
+scripts/build.ts       esbuild browser bundle (npm run build)
 ```
 
 The SDK is pinned to `@earendil-works/pi-coding-agent@1.4.0`. The `minimatch` and `undici` overrides select patched transitive versions; the real SDK integration tests run against those versions. Configuration stays server-side. Model adapters/endpoint tuning can be added without changing the UI transport.

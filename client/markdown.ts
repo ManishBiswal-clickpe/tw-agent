@@ -2,9 +2,11 @@ import { Marked } from "marked";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
 import markedKatex from "marked-katex-extension";
+
 const markdown = new Marked({ breaks: true, gfm: true });
 markdown.use({
   renderer: {
+    // Raw HTML from the model is shown as text, never rendered.
     html: ({ text }) =>
       text
         .replaceAll("&", "&amp;")
@@ -13,19 +15,26 @@ markdown.use({
   },
 });
 markdown.use(markedKatex({ throwOnError: false }));
-function safeHTML(value: string) {
-  return DOMPurify.sanitize(value, {
-    USE_PROFILES: { html: true },
+
+export function markdownToHtml(text: string): string {
+  return DOMPurify.sanitize(markdown.parse(text, { async: false }) as string, {
+    USE_PROFILES: { html: true, mathMl: true },
     FORBID_TAGS: ["style", "iframe", "form", "input", "button"],
   });
 }
-export function renderMarkdown(body: HTMLElement, text: string) {
-  body.innerHTML = safeHTML(markdown.parse(text, { async: false }) as string);
+
+export type ArtifactHandler = (source: string, title: string) => void;
+
+/** Post-process rendered markdown: links, highlighting, copy and preview buttons. */
+export function enhance(body: HTMLElement, onArtifact: ArtifactHandler) {
   for (const link of body.querySelectorAll("a")) {
     link.rel = "noreferrer noopener";
     link.target = "_blank";
   }
   for (const code of body.querySelectorAll<HTMLElement>("pre code")) {
+    const pre = code.parentElement!;
+    if (pre.dataset.enhanced) continue;
+    pre.dataset.enhanced = "1";
     const language = [...code.classList]
       .find((c) => c.startsWith("language-"))
       ?.slice(9);
@@ -34,15 +43,31 @@ export function renderMarkdown(body: HTMLElement, text: string) {
       code.innerHTML = DOMPurify.sanitize(
         hljs.highlight(source, { language }).value,
       );
+    const bar = document.createElement("div");
+    bar.className = "code-bar";
+    const label = document.createElement("span");
+    label.textContent = language || "text";
+    bar.append(label);
+    const actions = document.createElement("span");
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.onclick = async () => {
+      await navigator.clipboard.writeText(source);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1200);
+    };
     if (language === "html" || language === "svg") {
       const preview = document.createElement("button");
-      preview.textContent = "Preview artifact";
+      preview.type = "button";
+      preview.textContent = "Preview";
       preview.className = "artifact-button";
-      preview.onclick = () => showArtifact(source, "HTML artifact");
-      code.parentElement!.after(preview);
+      preview.onclick = () => onArtifact(source, "HTML artifact");
+      actions.append(preview);
     }
     if (language === "mermaid") {
       const preview = document.createElement("button");
+      preview.type = "button";
       preview.textContent = "Render diagram";
       preview.className = "artifact-button";
       preview.onclick = async () => {
@@ -60,28 +85,22 @@ export function renderMarkdown(body: HTMLElement, text: string) {
             `diagram-${crypto.randomUUID()}`,
             source,
           );
-          showArtifact(
+          onArtifact(
             DOMPurify.sanitize(svg, {
               USE_PROFILES: { svg: true, svgFilters: true },
             }),
             "Diagram",
           );
         } catch {
-          preview.textContent = "Diagram could not be rendered";
+          preview.textContent = "Diagram failed";
         } finally {
           preview.disabled = false;
         }
       };
-      code.parentElement!.after(preview);
+      actions.append(preview);
     }
+    actions.append(copy);
+    bar.append(actions);
+    pre.prepend(bar);
   }
-}
-export function showArtifact(source: string, title: string) {
-  const panel = document.getElementById("artifact-dialog") as HTMLDialogElement;
-  const frame = document.getElementById("artifact-frame") as HTMLIFrameElement;
-  document.getElementById("artifact-title")!.textContent = title;
-  // No scripts, origin access, forms, navigation, popups or network. Static previews only.
-  frame.setAttribute("sandbox", "");
-  frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'"><style>body{font:16px system-ui;margin:24px;overflow-wrap:anywhere}svg{max-width:100%;height:auto}</style>${source}`;
-  panel.showModal();
 }

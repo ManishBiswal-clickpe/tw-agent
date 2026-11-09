@@ -1,8 +1,12 @@
 import { build } from "esbuild";
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
+// Clean build: hashed chunks from earlier builds would otherwise pile up.
+await rm("public/assets", { recursive: true, force: true });
 await mkdir("public/assets", { recursive: true });
 await build({
-  entryPoints: ["client/app.ts", "client/connectors.ts", "client/renderer.ts"],
+  entryPoints: ["client/main.tsx"],
+  jsx: "automatic",
+  define: { "process.env.NODE_ENV": '"production"' },
   outdir: "public/assets",
   bundle: true,
   format: "esm",

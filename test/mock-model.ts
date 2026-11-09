@@ -24,6 +24,13 @@ export async function startMockModel(port = 0) {
       );
     }
     chunk({ role: "assistant" });
+    // Reasoning stream (llama.cpp / DeepSeek style) when the prompt asks to think.
+    if (
+      text?.includes("think") &&
+      !body.messages.some((m: { role: string }) => m.role === "tool")
+    )
+      for (const part of ["Let me look ", "at the package first."])
+        chunk({ reasoning_content: part });
     if (
       !body.messages.some((m: { role: string }) => m.role === "tool") &&
       text?.includes("codemode check")
@@ -62,6 +69,15 @@ export async function startMockModel(port = 0) {
         ],
       });
       chunk({}, "tool_calls");
+    } else if (text?.includes("markdown check")) {
+      chunk({
+        content:
+          "# Revision notes\n\n**Gradient descent** updates weights.\n\n| Week | Topic |\n| --- | --- |\n| 1 | Calculus |\n\n$E=mc^2$\n\n```js\nconst learningRate = 0.01;\n```\n\n```html\n<h1>Study planner</h1><style>h1{color:green}</style><script>parent.hacked=true</script>\n```\n\n<img src=x onerror=alert(1)>",
+      });
+      chunk({}, "stop");
+    } else if (text?.includes("diagram check")) {
+      chunk({ content: "```mermaid\ngraph LR\nA[Read notes] --> B[Revise]\n```" });
+      chunk({}, "stop");
     } else {
       for (const word of [
         "I inspected the workspace.\n\n",
